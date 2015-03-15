@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<title>RaTilicus 7D2D Map</title>
+
+<script src="//code.jquery.com/jquery-1.11.2.min.js"></script>
+
+<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.2/css/bootstrap.min.css">
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.2/js/bootstrap.min.js"></script>
+
+<link rel="stylesheet" href="http://cdn.leafletjs.com/leaflet-0.7.3/leaflet.css" />
+<script src="http://cdn.leafletjs.com/leaflet-0.7.3/leaflet.js"></script>
+
+<link rel="stylesheet" href="/static/sdtd.css" />
+<script src="/static/sdtd.js"></script>
+
+<script>
+function start() {
+    init_map();
+    get_entities();
+    get_markers();
+}
+</script>
+</head>
+
+<body onload="start()">
+<div class="container">
+<nav class="navbar navbar-inverse navbar-fixed-top">
+    <div class="container">
+        <div class="navbar-header">
+            <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#navbar" aria-expanded="false" aria-controls="navbar">
+                <span class="sr-only">Toggle navigation</span>
+                <span class="icon-bar"></span>
+                <span class="icon-bar"></span>
+                <span class="icon-bar"></span>
+            </button>
+            <a class="navbar-brand" href="#">RaTilicus 7D2D Map <span id="day_info"></span></a>
+        </div>
+        <div id="navbar" class="navbar-collapse collapse">
+            {% if user %}
+            <a class="navbar-brand navbar-right" href="/logout/">Logout</a>
+            <a class="navbar-brand navbar-right" href="#">Welcome {{ user['username'] }}</a>
+            {% else %}
+            <form class="navbar-form navbar-right" method="POST" action="/login/">{% module xsrf_form_html() %}
+                <div class="form-group">
+                    <input type="text" placeholder="Player Name" name="username" class="form-control" value="{{ username }}">
+                </div>
+                <div class="form-group">
+                    <input type="text" placeholder="####" name="password" class="form-control">
+                </div>
+                <button type="submit" class="btn btn-success">Sign in</button>
+            </form>
+            {% end %}
+        </div>
+    </div>
+</nav>
+
+<br>
+<br>
+<br>
+<br>
+{% if login_errors %}
+<div class="alert alert-error" role="alert">
+  <button type="button" class="close" data-dismiss="alert">&times;</button>
+  <strong>Error Logging in!</strong> Please, check your username and password and try again.  Password is provided in the welcome message upon logging in to the server.
+</div>
+{% end %}
+<div>Log into the 7D2D server to get the password</div>
+
+<div id="map"></div>
+
+<H4>under construction</h4>
+</div>
+</body>
+</html>
