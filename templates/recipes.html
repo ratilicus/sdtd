@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}RaTilicus 7D2D Recipes{% end %}
+
+{% block head %}
+<script src="/static/underscore-min.js"></script>
+<script src="/static/recipes.js"></script>
+{% end %}
+
+{% block body %}
+<br>
+<br>
+
+<H4>Recipes (from recipes.xml)</h4>
+<table style="width:90%;">
+<td style="width:30%;border: 1px solid;">
+	<div style="height:400px;overflow-y:auto;">
+		<div id="recipes"></div>
+	</div>
+</td>
+<td style="width:60%;border:1px solid;">
+	<div id="recipe"></div>
+</td>
+
+</table>
+
+<script type="text/template" class="recipe_template">
+    <h4><%- recipe.title %> x<%- recipe.count %></h4>
+    Craft area: <%- recipe.craft_area %><br>
+    Tool: <%- recipe.craft_tool %><br>
+    Time: <%- recipe.craft_time %><br>
+    Ingredients:<br>
+    <ul>
+    <% for (i in recipe.ingredients) { %>
+        <li><%- recipe.ingredients[i].title %> x<%- recipe.ingredients[i].count %></li>
+    <% }%>
+    </ul>
+</script>
+
+<script type="text/template" class="recipe_grid_template">
+    <h4><%- recipe.title %> x<%- recipe.count %></h4>
+    Time: <%- recipe.craft_time %><br>
+    <table class="grid">
+    <% for (y=-2; y<=2; y++) { %>
+        <tr>
+        <% for (x=-2;x<=2;x++) { %>
+            <td><%- recipe.grid[''+x+', '+y] || ' ' %></td>
+        <% } %>
+        </tr>
+    <% } %>
+    </table>
+</script>
+<script src="/static/recipes.js"></script>
+
+{% end %}
+

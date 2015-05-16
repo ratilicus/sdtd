@@ -1,34 +1,41 @@
 /* map css */
 #map {
-    max-width:1200px; 
-    height: 400px; 
+    height: 600px; 
+    cursor: crosshair;
 }
 
-/* chat css */
-#ob {  
-    /*  chat output box */
-    position:absolute:
-    top: 10px;
-    left:10px;
-    right:10px;
-    height:150px;
-    border:1px solid;
+#map img[src^="/static/map/2"] {
+    border: 1px solid red;
+    margin: -1px;
 }
-#ib {
-    /*  chat input box */
-    display:inline-block;
+
+#chat {
+}
+#chat-output {
+    width: 100%;
+    height:200px;
+    overflow-y: scroll;
     border: 1px solid;
-    margin-top: 1px;
-    position:absolute;
-    left:10px;
-    width: 88%;
 }
-#sb {
-    /*  chat submit button */
-    display:inline-block;
-    margin: 0;
-    position:absolute;
-    right:10px;
-    width: 10%;
+#chat-input {
+    width: 100%;
 }
 
+#info {
+    border: 1px solid #dddddd;
+    height:25px;
+}
+#info button {
+    padding: 0 5px;
+}
+#recipes div.selected {
+    background-color:#ddddff;
+}
+
+#recipe .grid td {
+    font-size: 8pt;
+    text-align: center;
+    border: 1px solid;
+    width: 120px;
+    height: 60px;
+}

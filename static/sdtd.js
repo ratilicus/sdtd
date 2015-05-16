@@ -14,12 +14,13 @@ Code used for displaying dynamic entity markers and static player made markers.
 - Author: Adam Dybczak (RaTilicus)
 */
 
+
 function init_map() {
     window.leafletMap = L.map('map', {
         crs: L.CRS.Simple
     }).setView([0.0, 0.0], 0);
 
-    L.tileLayer('/static/map/{z}/{x}/{y}.png', {
+    var layer=L.tileLayer('/static/map/{z}/{x}/{y}.png', {
         maxZoom: 4,
         tms: true,
         continuousWorld: true,
@@ -27,14 +28,32 @@ function init_map() {
     }).addTo(window.leafletMap);
     
     window.leafletMap.on('click', function(e) {
-        create_marker(e);
+        show_spot_info(e);
     });
+
+
+    console.log('layer', layer);
+    layer.on('tileload', function(e) {
+        console.log('tileload', e)
+    });
+
+    window.spot_info_template = _.template($('script.spot_info_template').html())
+    window.entity_info_template = _.template($('script.entity_info_template').html())
+    window.players = {};
+    window.zombies = {};
+    window.entity_markers={};
 }
 
 function login_submit(e) {
     e.preventDefault();
     console.log(e);
     return false;
+}
+
+function player_click(eid) {
+    var player = window.players[eid];
+    //console.log('click', player);
+    window.leafletMap.panTo([player.z/8.0, player.x/8.0])
 }
 
 /* ======================= entity markers js =============================== */
@@ -48,90 +67,102 @@ function add_entity_marker(x, y, z, name, opts) {
     return marker;
 }
 
-var entity_markers={};
-function get_entities() {
-    /*
-    Get entity markers
-    a background script keeps writing to the entities.js files periodically 
-    to update positions of various entities including players, zombies, 
-    animals, and current time. The background script is connected to the 
-    server telnet and runs gt and le commands.
-    */
-    $.get("/static/entities.js?ts="+ new Date().getTime(), function(in_data) {
-        var data = in_data.entities;
-        var day_info = in_data.day_info;
-        var refresh_rate_sec = in_data.refresh_rate || 60;
-
-        // remove existing map entity markers that are no longer in the game
-        for(id in entity_markers) {
-            var el = entity_markers[id];
-            if (! data[id]) {
-                // delete marker
-                window.leafletMap.removeLayer(entity_markers[id])
-                delete entity_markers[id]
-            }
-        };
-
-        // add/update entity markers
-        for(id in data) {
-            var e = data[id];
-            if (entity_markers[id]) {
-                // update
-                if (e.dead) { 
-                    color = '#666666';
-                    entity_markers[e.id].setStyle({color:color})
-                }
-                entity_markers[e.id].setLatLng([e.z/8.0, e.x/8.0])
-            } else {
-                // create
-                color = '#ffffff';
-                switch (e.type) {
-                    case 'EntityPlayer':
-                        color = '#00ff00';
-                        break;
-                    case 'EntityZombie':
-                    case 'EntityZombieCrawl':
-                    case 'EntityHornet':
-                        color = '#dd8800';
-                        break;
-                    case 'EntityZombieCop':
-                    case 'EntityZombieDog':
-                        color = '#ff0000';
-                        break;
-                    case 'EntityAnimalStag':
-                    case 'EntityAnimalRabbit':
-                        color = '#ffffff';
-                        break;
-                
-                }
-                if (e.dead) {
-                    color = '#666666';
-                }
-                entity_markers[e.id] = add_entity_marker(
-                    e.x, 
-                    e.y, 
-                    e.z, 
-                    e.name + " [" + e.type + "]", 
-                    {color: color}
-                )
-            }
-        };
-        $('#day_info').html(day_info);
-        // refresh rate is provided from the server.
-        // When players are in the server updates are every 2 sec, else 30 sec
-        window.setTimeout('get_entities()', 1000 * refresh_rate_sec)
-    }, "json").fail(function(a,b,c) {console.log('error', a,b,c)});
+function update_info() {
+    $('#entity-info').html(window.entity_info_template({
+        players: players
+    }));
 }
+
+function remove_entities(entity_ids, exclude_ids) {
+    for(i in entity_ids) {
+        var id = entity_ids[i];
+        if (!exclude_ids || exclude_ids.indexOf(id)==-1) {
+            var en = window.entity_markers[id];
+            delete window.entity_markers[id];
+            delete window.players[id];
+            delete window.zombies[id];
+            update_info();
+            if(en) window.leafletMap.removeLayer(en)
+        }
+    }
+}
+
+function update_entities(entities, remove, full) {
+   
+    
+    for(id in entities) {
+        update_entity(entities[id]);
+    }
+    if (full) {
+        remove_entities(Object.keys(window.entity_markers), Object.keys(entities));    
+    } else
+        remove_entities(remove);
+}
+
+function update_entity(e) {
+    var id = e.id;
+
+    var is_player = false;
+
+    if (e.dead) {
+        color = '#666666';
+    } else switch (e.type) {
+        case 'EntityPlayer':
+            color = '#00ff00';
+            is_player = true;
+            window.players[e.id] = e;
+            break;
+        case 'EntityZombie':
+        case 'EntityZombieCrawl':
+        case 'EntityHornet':
+            color = '#dd8800';
+            window.zombies[e.id] = e;
+            break;
+        case 'EntityZombieCop':
+        case 'EntityZombieDog':
+            color = '#ff0000';
+            window.zombies[e.id] = e;
+            break;
+        case 'EntityAnimalStag':
+        case 'EntityAnimalRabbit':
+            color = '#ffffff';
+            break;
+    }
+
+    if (window.entity_markers[id]) {
+        // update
+        if (e.dead) { 
+            window.entity_markers[e.id].setStyle({color:color})
+        }
+        window.entity_markers[e.id].setLatLng([e.z/8.0, e.x/8.0])
+    } else {
+        // create
+        
+        var lat = e.z, lng = e.x;
+        var NSEW = Math.abs(lat)+ (lat>=0 ? " N ": " S ") +
+           Math.abs(lng)+ (lng>=0 ? " E": " W");
+
+        window.entity_markers[e.id] = add_entity_marker(
+            e.x, 
+            e.y, 
+            e.z, 
+            e.name + " [" + e.type + "]", 
+            {color: color, zIndexOffset: is_player ? 1000 : 100}
+        )
+        update_info();
+    }
+}
+
 
 /* ============================== markers js =============================== */
 function add_marker(x, y, z, name, opts) {
     // create a static marker (square)
     var lat = z/8.0, lng = x/8.0;
     var marker = L.polygon([
-        [lat-2.0, lng-2.0],
-        [lat+2.0, lng-2.0],
-        [lat+2.0, lng+2.0],
-        [lat-2.0, lng+2.0]
+        [lat-1.0, lng-1.0],
+        [lat+1.0, lng-1.0],
+        [lat+1.0, lng+1.0],
+        [lat-1.0, lng+1.0]
     ], opts || {}).addTo(window.leafletMap);
     marker.bindPopup(name);
     return marker;
@@ -162,8 +193,8 @@ function get_markers() {
             var desc = "["+NSEW+"] ("+ 
                         (e.public ? 'public' : 'private' ) +") <br>" + 
                         e.desc + "<br><br>" +
-                        "- " + (e.player || 'Anonymous') + 
-                        ((e.o || !e.player) ? 
+                        "- " + (e.username || 'Anonymous') + 
+                        ((e.o || !e.username) ? 
                         "<br><button onclick=\"remove_marker('"+
                         e.id+"')\">Remove</button>" : "");
             
@@ -172,12 +203,22 @@ function get_markers() {
     }, "json").fail(function(a,b,c) {console.log('error', a,b,c)});
 }
 
-function create_marker(e) {
+function show_spot_info(e) {
     /*
     add a player made marker
     */
-    var lat = e.latlng.lat*8;
-    var lng = e.latlng.lng*8;
+    var lat = Math.floor(e.latlng.lat*8);
+    var lng = Math.floor(e.latlng.lng*8);
+    var NSEW = Math.abs(lat)+ (lat>=0 ? " N ": " S ") +
+               Math.abs(lng)+ (lng>=0 ? " E ": " W ");
+    $('#spot-info').html(window.spot_info_template({NSEW: NSEW, lat: lat, lng: lng}));
+}
+
+function create_marker(lat, lng) {
+    /*
+    add a player made marker
+    */
+    console.log('create_marker', lat, lng);
     var NSEW = Math.abs(lat)+ (lat>=0 ? " N ": " S ") +
                Math.abs(lng)+ (lng>=0 ? " E": " W");
     var desc = prompt("Creating a marker at ["+NSEW+"]\n" +

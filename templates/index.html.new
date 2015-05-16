@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+
+{% block title %}RaTilicus 7D2D Map{% end %}
+
+{% block head %}
+<script src="/static/sdtd.js"></script>
+<script src="/static/ws.js"></script>
+{% end %}
+
+{% block script %}
+function start() {
+    init_map();
+    get_entities();
+    get_markers();
+    init_ws();
+}
+
+function onkey(e, down) {
+//    e.preventDefault();
+    if (e.target.id == 'chat-input') {
+        if (e.keyCode == 13 && down) {
+            send();
+        }
+    } else {
+        console.log('onKey', e, down);
+    }
+}
+
+{% end %}
+
+{% block body %}
+<br>
+<br>
+{% if login_errors %}
+<div class="alert alert-error" role="alert">
+  <button type="button" class="close" data-dismiss="alert">&times;</button>
+  <strong>Error Logging in!</strong> Please, check your username and password and try again.  
+  Password is provided in the welcome message upon logging in to the server.
+</div>
+{% end %}
+<div>Your in game player name is your username, log into the game server to get the password</div>
+
+<div class="row">
+
+    <div id="map" class="col-md-8"></div>
+    <div class="col-md-4">
+        Marker Type:<br>
+        <input type="radio" name="m_type" value="marker">Marker<br>
+        <input type="radio" name="m_type" value="looted">Looted place<br>
+        <input type="radio" name="m_type" value="poi">POI<br>
+        <input type="radio" name="m_type" value="poi">POI<br>
+    </div>
+</div>
+<ul>
+<li>green circles = players</li>
+<li>white circles = animals: deer, pigs, rabbits</li>
+<li>dark gray circles = dead/killed animals, players, zombies</li>
+<li>orange circles = zombies</li>
+<li>red circles = dangerous zombies: cop zombies, dogs</li>
+<li>yellow squares = player made markers<br>
+- click on marker to view details<br>
+- click anywhere on map to create a marker<br>
+- to create a private marker only you can see put a * in front of the description (note: you have to be logged in)
+</li>
+<li>To log in type your in-game player name, and the 4 digit number in the welcome message in the game is the password.</li>
+<li>Note: The server is currently running with Anti-Cheat off.  Since Alpha 11 release, my linux 32bit client of 7d2d doesn't start.<br>
+The 64bit client does work (currently), but it does not seem to support the Anti-Cheat, so I have to have it disabled, for now.</li>
+</ul>
+
+<div id="chat" class="col-md-12">
+    <div id="chat-output"></div>
+    <input type="text" id="chat-input" onkeydown="onkey(event, true);">
+</div>
+
+{% end %}

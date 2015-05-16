@@ -1,75 +1,70 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<title>RaTilicus 7D2D Map</title>
+{% extends "base.html" %}
 
-<script src="//code.jquery.com/jquery-1.11.2.min.js"></script>
 
-<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.2/css/bootstrap.min.css">
-<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.2/js/bootstrap.min.js"></script>
+{% block title %}RaTilicus 7D2D Map{% end %}
 
-<link rel="stylesheet" href="http://cdn.leafletjs.com/leaflet-0.7.3/leaflet.css" />
-<script src="http://cdn.leafletjs.com/leaflet-0.7.3/leaflet.js"></script>
-
-<link rel="stylesheet" href="/static/sdtd.css" />
+{% block head %}
 <script src="/static/sdtd.js"></script>
+<script src="/static/ws.js"></script>
+{% end %}
 
-<script>
+{% block script %}
 function start() {
     init_map();
-    get_entities();
+    //get_entities();
     get_markers();
+    init_ws();
 }
-</script>
-</head>
 
-<body onload="start()">
-<div class="container">
-<nav class="navbar navbar-inverse navbar-fixed-top">
-    <div class="container">
-        <div class="navbar-header">
-            <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#navbar" aria-expanded="false" aria-controls="navbar">
-                <span class="sr-only">Toggle navigation</span>
-                <span class="icon-bar"></span>
-                <span class="icon-bar"></span>
-                <span class="icon-bar"></span>
-            </button>
-            <a class="navbar-brand" href="#">RaTilicus 7D2D Map <span id="day_info"></span></a>
-        </div>
-        <div id="navbar" class="navbar-collapse collapse">
-            {% if user %}
-            <a class="navbar-brand navbar-right" href="/logout/">Logout</a>
-            <a class="navbar-brand navbar-right" href="#">Welcome {{ user['username'] }}</a>
-            {% else %}
-            <form class="navbar-form navbar-right" method="POST" action="/login/">{% module xsrf_form_html() %}
-                <div class="form-group">
-                    <input type="text" placeholder="Player Name" name="username" class="form-control" value="{{ username }}">
-                </div>
-                <div class="form-group">
-                    <input type="text" placeholder="####" name="password" class="form-control">
-                </div>
-                <button type="submit" class="btn btn-success">Sign in</button>
-            </form>
-            {% end %}
-        </div>
-    </div>
-</nav>
+function onkey(e, down) {
+//    e.preventDefault();
+    if (e.target.id == 'chat-input') {
+        if (e.keyCode == 13 && down) {
+            send();
+        }
+    } else {
+        console.log('onKey', e, down);
+    }
+}
 
-<br>
-<br>
+{% end %}
+
+{% block body %}
 <br>
 <br>
 {% if login_errors %}
 <div class="alert alert-error" role="alert">
   <button type="button" class="close" data-dismiss="alert">&times;</button>
-  <strong>Error Logging in!</strong> Please, check your username and password and try again.  Password is provided in the welcome message upon logging in to the server.
+  <strong>Error Logging in!</strong> Please, check your username and password and try again.  
+  Password is provided in the welcome message upon logging in to the server.
 </div>
 {% end %}
-<div>Log into the 7D2D server to get the password</div>
+<div id="entity-info"></div>
 
-<div id="map"></div>
+<div>
 
-<H4>under construction</h4>
+    <div>
+        <div id="map"></div>
+        <div id="spot-info"></div>
+    </div>
+    <div>
+        <div id="chat-output"></div>
+        <input type="text" id="chat-input" onkeydown="onkey(event, true);" placeholder="Type here to send a message">
+    </div>
 </div>
-</body>
-</html>
+
+<script type="text/template" class="entity_info_template">
+Playing: <% for(eid in players) { var player = players[eid]; %><button onclick="player_click(<%= eid %>)"><%= player.name %></button><% } %>
+</script>
+
+<script type="text/template" class="spot_info_template">
+<button onclick="create_marker(<%= lat %>, <%= lng %>)">Create a Marker</button>
+{% if user %}
+<button onclick="teleport(<%= lng %>, <%= lat %>)">Teleport</button>
+{% end %}
+<%= NSEW %> Coord: (<%= lng %>, ?, <%= lat %>) 
+Region: (<%= Math.floor(lng/512) %>, <%= Math.floor(lat/512) %>)
+Sector: (<%= Math.floor((lng<0 ? 32: 0)+lng%512/16) %>, <%= Math.floor((lat<0 ? 32: 0)+lat%512/16) %>)
+</script>
+
+{% end %}
