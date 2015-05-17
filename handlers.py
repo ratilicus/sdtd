@@ -73,6 +73,9 @@ class IndexHandler(BaseHandler):
             login_errors='login_errors' in self.request.arguments,
         )
         print 'show login form'
+        self.set_header('Cache-Control', 'no-cache, must-revalidate')
+        self.set_header('Pragma', 'no-cache')
+        self.set_header('Expires', 'Sun, 11 Aug 2013 11:00:00 GMT')
         self.render('templates/index.html', **data)
 
 

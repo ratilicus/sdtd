@@ -13,14 +13,14 @@ Code used for displaying dynamic entity markers and static player made markers.
 
 - Author: Adam Dybczak (RaTilicus)
 */
-
+var degRad = Math.PI/180
 
 function init_map() {
     window.leafletMap = L.map('map', {
         crs: L.CRS.Simple
     }).setView([0.0, 0.0], 0);
 
-    var layer=L.tileLayer('/static/map/{z}/{x}/{y}.png', {
+    window.leafletMapTileLayer=L.tileLayer('/static/map/{z}/{x}/{y}.png', {
         maxZoom: 4,
         tms: true,
         continuousWorld: true,
@@ -31,17 +31,20 @@ function init_map() {
         show_spot_info(e);
     });
 
-
-    console.log('layer', layer);
-    layer.on('tileload', function(e) {
-        console.log('tileload', e)
+    window.leafletMap.on('movestart', function(e) {
+        window.clearTimeout(window.follow_timer);
     });
+    /*
+    window.leafletMapTileLayer.on('tileload', function(e) {
+        console.log('tileload', e)
+    });*/
 
     window.spot_info_template = _.template($('script.spot_info_template').html())
     window.entity_info_template = _.template($('script.entity_info_template').html())
     window.players = {};
     window.zombies = {};
     window.entity_markers={};
+    window.setTimeout(redraw_map, 10000);
 }
 
 function login_submit(e) {
@@ -50,22 +53,83 @@ function login_submit(e) {
     return false;
 }
 
+function redraw_map() {
+    console.log('redraw');
+    var t = new Date().getTime();
+    $('#map img').each(function(i, img) {
+        src = img.src.split('?')[0]
+        img.src = src + '?t=' + t
+    });
+   
+    if (window.redraw_timer)
+        window.clearTimeout(window.redraw_timer);
+    window.redraw_timer = window.setTimeout(redraw_map, 10000);
+}
+
 function player_click(eid) {
+    if (eid) {
+        window.followPlayer = eid;
+    } else {
+        eid = window.followPlayer;
+    }
     var player = window.players[eid];
     //console.log('click', player);
-    window.leafletMap.panTo([player.z/8.0, player.x/8.0])
+    if (player) {
+        window.leafletMap.panTo([player.z/8.0, player.x/8.0]);
+        //window.leafletMapTileLayer.redraw();
+        if ($('#follow-player').prop('checked')) {
+            window.follow_timer = window.setTimeout(player_click, 250);
+        }
+    }
 }
 
 /* ======================= entity markers js =============================== */
-function add_entity_marker(x, y, z, name, opts) {
+function add_entity_marker(x, y, z, h, name, opts) {
+    var lat = z/8.0, lng = x/8.0;
+    /*
     // add a entity marker (circle)
     var marker = L.circleMarker(
-        [z/8.0, x/8.0], 
+        [lat, lng], 
         opts || {}
     ).addTo(window.leafletMap);
     marker.bindPopup(name);
-    return marker;
+
+    var lmarker = L.polyline(
+        [[lat, lng], [lat+Math.cos(h*degRad)*0.75, lng+Math.sin(h*degRad)*0.75]],
+        opts || {}
+    ).addTo(window.leafletMap);
+
+    return [marker, lmarker];*/
+    var marker = L.polygon(
+        [
+            [lat+Math.cos((h-120)*degRad)*0.5, lng+Math.sin((h-120)*degRad)*0.5],
+            [lat+Math.cos(h*degRad), lng+Math.sin(h*degRad)],
+            [lat+Math.cos((h+120)*degRad)*0.5, lng+Math.sin((h+120)*degRad)*0.5]
+        ],
+        opts || {}
+    ).addTo(window.leafletMap);
+    marker.bindPopup(name);
+    return marker
 }
+
+function update_entity_marker(em, x, y, z, h, color) {
+    var lat = z/8.0, lng = x/8.0;
+    /*
+    var marker = em[0];
+    var lmarker = em[1];
+    marker.setStyle({color:color})
+    marker.setLatLng([lat, lng])
+    lmarker.setLatLngs([[lat, lng], [lat+Math.cos(h*degRad)*0.5, lng+Math.sin(h*degRad)*0.5]]);*/
+    em.setStyle({fillColor:color})
+    em.setLatLngs(
+        [
+            [lat+Math.cos((h-120)*degRad)*0.75, lng+Math.sin((h-120)*degRad)*0.75],
+            [lat+Math.cos(h*degRad)*1.0, lng+Math.sin(h*degRad)*1.0],
+            [lat+Math.cos((h+120)*degRad)*0.75, lng+Math.sin((h+120)*degRad)*0.75]
+        ]
+    );
+}
+
 
 function update_info() {
     $('#entity-info').html(window.entity_info_template({
@@ -130,11 +194,16 @@ function update_entity(e) {
     }
 
     if (window.entity_markers[id]) {
+        var lat = e.z/8.0, lng = e.x/8.0;
         // update
-        if (e.dead) { 
-            window.entity_markers[e.id].setStyle({color:color})
-        }
-        window.entity_markers[e.id].setLatLng([e.z/8.0, e.x/8.0])
+        update_entity_marker(
+            window.entity_markers[e.id],
+            e.x, 
+            e.y, 
+            e.z, 
+            e.h, 
+            color
+        )
     } else {
         // create
         
@@ -146,13 +215,20 @@ function update_entity(e) {
             e.x, 
             e.y, 
             e.z, 
+            e.h, 
             e.name + " [" + e.type + "]", 
-            {color: color, zIndexOffset: is_player ? 1000 : 100}
+            {
+                weight: 2,
+                opacity: 0.8,
+                color: '#000000',
+                fillColor: color, 
+                fillOpacity: is_player ? 0.75 : 0.5, 
+                zIndexOffset: is_player ? 1000 : 100
+            }
         )
         update_info();
     }
 }
-
 
 /* ============================== markers js =============================== */
 function add_marker(x, y, z, name, opts) {

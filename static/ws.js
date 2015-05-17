@@ -6,17 +6,19 @@ function init_ws() {
     };
     window.ws.onmessage = function (evt) {
         json = JSON.parse(evt.data);
-        console.log(json);
+        //console.log(json);
         switch (json.tt) {
             case 'ue':
-                console.log(json);
+                //console.log(json);
                 update_entities(json.ue, json.re, json.full);
                 break;
             case 'ut':
                 $('#day_info').html(json.ut);
                 break;
             case 'msg':
-                $('#chat-output').append($('<div class="btn-info">'+json.msg+'</div>'));
+                var out = $('#chat-output')
+                out.append($('<div class="btn-info">'+json.msg+'</div>'));
+                out.scrollTop(out.prop("scrollHeight"));
                 break;
             default:
                 console.log(json);

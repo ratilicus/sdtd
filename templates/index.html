@@ -4,6 +4,7 @@
 {% block title %}RaTilicus 7D2D Map{% end %}
 
 {% block head %}
+<meta http-equiv="Cache-control" content="no-cache">
 <script src="/static/sdtd.js"></script>
 <script src="/static/ws.js"></script>
 {% end %}
@@ -39,7 +40,14 @@ function onkey(e, down) {
   Password is provided in the welcome message upon logging in to the server.
 </div>
 {% end %}
-<div id="entity-info"></div>
+<div>
+    <span class="">
+        <button onclick="redraw_map()">Refresh Map</button>
+        <input type="checkbox" id="follow-player" onclick="player_click()"> 
+        <label for="follow-player">Follow</label>
+    </span>
+    <span id="entity-info"></span>
+</div>
 
 <div>
 

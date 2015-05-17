@@ -85,7 +85,7 @@ class GTCommand(CommandBase):
         return True
 
 class LECommand(CommandBase):
-    entity_pat = re.compile('^.*type=([^,]+).*name=([^,]+).*id=(\d+).*pos=\((-?\d+\.\d+), (-?\d+\.\d+), (-?\d+\.\d+)\).*dead=(True|False).*$')
+    entity_pat = re.compile('^.*type=([^,]+).*name=([^,]+).*id=(\d+).*pos=\((-?\d+\.\d+), (-?\d+\.\d+), (-?\d+\.\d+)\).*rot=\((-?\d+\.\d+), (-?\d+\.\d+), (-?\d+\.\d+)\).*dead=(True|False).*$')
     entities = {}
     old_entities = {}
     
@@ -125,9 +125,9 @@ class LECommand(CommandBase):
         try:
             if 'type=Entity' in line and not 'type=EntityCar' in line and not 'EntityItem' in line and 'dead=' in line:
                 pat_data = self.entity_pat.findall(line.strip())
-                type, name, eid, x, y, z, dead = pat_data[0]
+                type, name, eid, x, y, z, rx, ry, rz, dead = pat_data[0]
                 eid=int(eid)
-                data = dict(id=eid, type=type, name=name, x=float(x), y=float(y), z=float(z), dead=dead=='True')
+                data = dict(id=eid, type=type, name=name, x=float(x), y=float(y), z=float(z), h=float(ry), dead=dead=='True')
                 self.telnet_parser.entities[eid] = data
 
                 self.entities[eid] = data
@@ -192,7 +192,7 @@ class TelnetParser(object):
         self.last_cmd = ''
 
         self.commands = [
-#            GTCommand(db, telnet, self.ts, self),
+            GTCommand(db, telnet, self.ts, self),
             LECommand(db, telnet, self.ts, self),
         ]
         self.current_command = None
