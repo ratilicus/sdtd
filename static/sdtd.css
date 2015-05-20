@@ -1,3 +1,21 @@
+.navbar {
+    margin-bottom: 0px;
+}
+ul.navbar-right {
+    margin-right: 5px;
+}
+.navbar-form input.login-pin {
+    width: 60px;
+}
+
+#entity-info,
+#location-info {
+    height: 26px;
+    overflow-y: auto;
+    line-height:24px;
+    font-size: 10pt;
+}
+
 /* map css */
 #map {
     height: 550px; 
@@ -17,6 +35,12 @@
     overflow-y: scroll;
     border: 1px solid;
 }
+
+#chat-output div.btn-info {
+    font-weight: normal;
+    font-size: 9pt;
+}
+
 #chat-input {
     width: 100%;
 }

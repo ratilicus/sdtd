@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 
 
-{% block title %}RaTilicus 7D2D Map{% end %}
+{% block title %} | Map{% end %}
 
 {% block head %}
 <meta http-equiv="Cache-control" content="no-cache">
-<script src="/static/sdtd.js"></script>
-<script src="/static/ws.js"></script>
+<script src="/static/sdtd.js?t={{t}}"></script>
+<script src="/static/ws.js?t={{t}}"></script>
 {% end %}
 
 {% block script %}
@@ -31,8 +31,6 @@ function onkey(e, down) {
 {% end %}
 
 {% block body %}
-<br>
-<br>
 {% if login_errors %}
 <div class="alert alert-error" role="alert">
   <button type="button" class="close" data-dismiss="alert">&times;</button>
@@ -40,29 +38,14 @@ function onkey(e, down) {
   Password is provided in the welcome message upon logging in to the server.
 </div>
 {% end %}
-<div>
-    <span class="">
-        <button onclick="redraw_map()">Refresh Map</button>
-        <input type="checkbox" id="follow-player" onclick="player_click()"> 
-        <label for="follow-player">Follow</label>
-    </span>
-    <span id="entity-info"></span>
-</div>
-
-<div>
-
-    <div>
-        <div id="map"></div>
-        <div id="spot-info"></div>
-    </div>
-    <div>
-        <div id="chat-output"></div>
-        <input type="text" id="chat-input" onkeydown="onkey(event, true);" placeholder="Type here to send a message">
-    </div>
-</div>
+<div id="entity-info"></div>
+<div id="map"></div>
+<div id="location-info"></div>
+<div id="chat-output"></div>
+<input type="text" id="chat-input" onkeydown="onkey(event, true);" placeholder="Type here to send a message">
 
 <script type="text/template" class="entity_info_template">
-Playing: <% for(eid in players) { var player = players[eid]; %><button onclick="player_click(<%= eid %>)"><%= player.name %></button><% } %>
+<%- day_info %> <% for(eid in players) { var player = players[eid]; %><button onclick="player_click(<%= eid %>)"><%- player.name %> [ <%- player.dead ? 'dead' : player.health %> ]</button><% } %>
 </script>
 
 <script type="text/template" class="spot_info_template">

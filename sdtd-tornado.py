@@ -5,6 +5,7 @@
 by: Adam Dybczak (RaTilicus)
 '''
 
+import time
 import tornado.web, tornado.ioloop
 import motor
 from bson.json_util import loads as json_decode, dumps as json_encode
@@ -27,13 +28,15 @@ if __name__ == '__main__':
     telnet_parser = TelnetParser(db, telnet)
 
     SETTINGS = {
+        't': int(time.time()),
         'cookie_secret': "__TODO:_GENERATE_YOUR_OWN_RANDOM_VALUE_HERE__",
         "login_url": "/login",
         #'xsrf_cookies': True,
         'autoreload': True,
-        'debug': True,
+        #'debug': True,
         'db': db,
         'telnet': telnet,
+        'telnet_parser': telnet_parser,
         'sockets': sockets,
     }
 

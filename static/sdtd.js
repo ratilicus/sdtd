@@ -16,11 +16,15 @@ Code used for displaying dynamic entity markers and static player made markers.
 var degRad = Math.PI/180
 
 function init_map() {
+    window.onresize = window_resize
+    window_resize();
+
     window.leafletMap = L.map('map', {
-        crs: L.CRS.Simple
+        crs: L.CRS.Simple,
+//        maxZoom: 5
     }).setView([0.0, 0.0], 0);
 
-    window.leafletMapTileLayer=L.tileLayer('/static/map/{z}/{x}/{y}.png', {
+    window.leafletMapTileLayer = L.tileLayer('/static/map/{z}/{x}/{y}.png', {
         maxZoom: 4,
         tms: true,
         continuousWorld: true,
@@ -47,6 +51,12 @@ function init_map() {
     window.setTimeout(redraw_map, 10000);
 }
 
+function window_resize(e) {
+    var height = window.innerHeight - $('nav').height() - $('#entity-info').height() - $('#location-info').height() - $('#chat-input').height() - 8;
+    $('#map').css('height', Math.floor(height * 0.75) + 'px');
+    $('#chat-output').css('height', Math.floor(height * 0.25) + 'px');
+}
+
 function login_submit(e) {
     e.preventDefault();
     console.log(e);
@@ -54,7 +64,6 @@ function login_submit(e) {
 }
 
 function redraw_map() {
-    console.log('redraw');
     var t = new Date().getTime();
     $('#map img').each(function(i, img) {
         src = img.src.split('?')[0]
@@ -76,10 +85,10 @@ function player_click(eid) {
     //console.log('click', player);
     if (player) {
         window.leafletMap.panTo([player.z/8.0, player.x/8.0]);
-        //window.leafletMapTileLayer.redraw();
-        if ($('#follow-player').prop('checked')) {
-            window.follow_timer = window.setTimeout(player_click, 250);
+        if (window.leafletMap.getZoom() < 3) {
+            window.leafletMap.setZoom(3);
         }
+        window.follow_timer = window.setTimeout(player_click, 250);
     }
 }
 
@@ -133,6 +142,7 @@ function update_entity_marker(em, x, y, z, h, color) {
 
 function update_info() {
     $('#entity-info').html(window.entity_info_template({
+        day_info: window.day_info || '',
         players: players
     }));
 }
@@ -230,7 +240,10 @@ function update_entity(e) {
     }
 }
 
-/* ============================== markers js =============================== */
+/* ============================== markers js =============================== 
+Place Markers based on AJAX calls
+TODO: add different kinds of markers (different shapes, sizes, and colors)
+*/
 function add_marker(x, y, z, name, opts) {
     // create a static marker (square)
     var lat = z/8.0, lng = x/8.0;
@@ -244,7 +257,7 @@ function add_marker(x, y, z, name, opts) {
     return marker;
 }
 
-var markers={};
+window.place_markers = {};
 function get_markers() {
     /*
     Tornado server code using mongodb are used for managing markers
@@ -253,9 +266,9 @@ function get_markers() {
         var data = in_data.data;
 
         // remove existing static markers from map
-        for(id in markers) {
-            window.leafletMap.removeLayer(markers[id])
-            delete markers[id]
+        for(id in window.place_markers) {
+            window.leafletMap.removeLayer(window.place_markers[id])
+            delete window.place_markers[id]
         };
 
         // add new markers
@@ -274,7 +287,7 @@ function get_markers() {
                         "<br><button onclick=\"remove_marker('"+
                         e.id+"')\">Remove</button>" : "");
             
-            markers[e.id] = add_marker(e.x, e.y, e.z, desc, {color: color})
+            window.place_markers[e.id] = add_marker(e.x, e.y, e.z, desc, {color: color})
         };
     }, "json").fail(function(a,b,c) {console.log('error', a,b,c)});
 }
@@ -287,7 +300,7 @@ function show_spot_info(e) {
     var lng = Math.floor(e.latlng.lng*8);
     var NSEW = Math.abs(lat)+ (lat>=0 ? " N ": " S ") +
                Math.abs(lng)+ (lng>=0 ? " E ": " W ");
-    $('#spot-info').html(window.spot_info_template({NSEW: NSEW, lat: lat, lng: lng}));
+    $('#location-info').html(window.spot_info_template({NSEW: NSEW, lat: lat, lng: lng}));
 }
 
 function create_marker(lat, lng) {

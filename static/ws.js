@@ -1,9 +1,19 @@
-function init_ws() {
-    window.username = 'User'
+function open_ws(reconnecting) {
     window.ws = new WebSocket("ws://7d2d.ratilicus.com/ws/");
     window.ws.onopen = function() {
-        console.log('opened')
-    };
+        console.log('opened');
+        if (reconnecting) {
+            // if it got disconnected, chances are good it's due to backend change.  
+            // So, reload to pull in the latest changes
+            location.reload();        
+        }
+    }
+
+    window.ws.onclose = function() {
+        console.log('closed.. reopening');
+        open_ws(true);
+    }
+
     window.ws.onmessage = function (evt) {
         json = JSON.parse(evt.data);
         //console.log(json);
@@ -13,18 +23,26 @@ function init_ws() {
                 update_entities(json.ue, json.re, json.full);
                 break;
             case 'ut':
-                $('#day_info').html(json.ut);
+                window.day_info = json.ut
+                update_info();
                 break;
             case 'msg':
                 var out = $('#chat-output')
                 out.append($('<div class="btn-info">'+json.msg+'</div>'));
                 out.scrollTop(out.prop("scrollHeight"));
                 break;
+            case 'lr':
+                location.reload();
+                break;
             default:
                 console.log(json);
         }
-        
-    };
+    }
+}
+
+function init_ws() {
+    window.username = 'User'
+    open_ws();
 }
 
 function send() {
@@ -60,7 +78,7 @@ function teleport(x, z) {
                 });
                 window.ws.send(json);
             } else {
-                alert('Height ' + h + ' not within 3 -128')            
+                alert('Height ' + h + ' not within 3 and -128')            
             }
         }
     }

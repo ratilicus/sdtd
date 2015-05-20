@@ -1,8 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<title>{% block title %}RaTilicus 7D2D Map{% end %}</title>
+<title>7d2d.RaTilicus.com{% block title %}7D2D.RaTilicus.com{% end %}</title>
 
+<link rel="shortcut icon" type="image/x-icon" href="/static/favicon.ico" />
 <script src="//code.jquery.com/jquery-1.11.2.min.js"></script>
 
 <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.2/css/bootstrap.min.css">
@@ -11,7 +12,7 @@
 <link rel="stylesheet" href="http://cdn.leafletjs.com/leaflet-0.7.3/leaflet.css" />
 <script src="http://cdn.leafletjs.com/leaflet-0.7.3/leaflet.js"></script>
 
-<link rel="stylesheet" href="/static/sdtd.css" />
+<link rel="stylesheet" href="/static/sdtd.css?t={{t}}" />
 
 <script src="/static/underscore-min.js"></script>
 
@@ -27,49 +28,38 @@ function start() {
 </head>
 
 <body onload="start()">
-<div class="container">
-<nav class="navbar navbar-inverse navbar-fixed-top">
-    <div class="container">
-        <div class="navbar-header">
-            <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#navbar" aria-expanded="false" aria-controls="navbar">
-                <span class="sr-only">Toggle navigation</span>
-                <span class="icon-bar"></span>
-                <span class="icon-bar"></span>
-                <span class="icon-bar"></span>
-            </button>
-            <a class="navbar-brand" href="/">RaTilicus 7D2D <span id="day_info"></span></a>
-            <a class="navbar-brand" href="/about/">About</a>
-            <a class="navbar-brand" href="/recipes/">Recipes</a>
-        </div>
-        <div id="navbar" class="navbar-collapse collapse">
-            {% if user %}
-            <a class="navbar-brand navbar-right" href="/logout/">Logout</a>
-            <a class="navbar-brand navbar-right" href="#">Welcome {{ user['username'] }}</a>
-            {% else %}
-            <form class="navbar-form navbar-right" method="POST" action="/login/">{% module xsrf_form_html() %}
-                <div class="form-group">
-                    <input type="text" placeholder="Player Name" name="username" class="form-control" value="{{ username }}">
-                </div>
-                <div class="form-group">
-                    <input type="text" placeholder="####" name="password" class="form-control">
-                </div>
-                <button type="submit" class="btn btn-success">Sign in</button>
-            </form>
-            {% end %}
-        </div>
-    </div>
+<div class="container-disabled">
+<nav class="navbar navbar-inverse">
+    <ul class="nav navbar-nav">
+        <li><a class="navbar-brand" href="/">7D2D.RaTilicus.com</li>
+        <li><a class="navbar-brand" href="/about/">About</a></li>
+        <li><a class="navbar-brand" href="/recipes/">Recipes</a></li>
+    </ul>
+    {% if not user %}
+        <form class="navbar-form navbar-right" role="login" method="POST" action="/login/">{% module xsrf_form_html() %}
+            <div class="form-group">
+                <input type="text" placeholder="Player Name" name="username" class="form-control login-username" value="{{ username }}">
+            </div>
+            <div class="form-group">
+                <input type="text" placeholder="####" name="password" class="form-control login-pin">
+            </div>
+            <button type="submit" class="btn btn-success">Sign in</button>
+            &nbsp;
+        </form>
+    {% else %}
+        <ul class="nav navbar-nav navbar-right">
+            <li class="dropdown">
+                <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-expanded="false">{{ user['username'] }} <span class="caret"></span></a>
+                <ul class="dropdown-menu" role="menu">
+                    <li><a href="/logout/">Logout</a></li>
+                </ul>
+            </li>
+        </ul>
+    {% end %}
 </nav>
-
-<br>
-<br>
 
 {% block body %}{% end %}
 </div>
-
-<footer class="footer">
-    <div class="container">
-        <p class="text-muted text-center">Copyright 2015. <a href="mailto:rat@ratilicus.com">Contact RaT</a></p>
-    </div>
-</footer>
 </body>
 </html>
+

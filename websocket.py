@@ -8,6 +8,7 @@ from bson import ObjectId
 from bson.json_util import loads as json_decode, dumps as json_encode
 from tornado import gen
 
+
 class WebSocket(tornado.websocket.WebSocketHandler):
     sid = None
     name = None
@@ -26,12 +27,14 @@ class WebSocket(tornado.websocket.WebSocketHandler):
         WebSocket.sockets = self.settings['sockets']
         self.db = self.settings['db']
         self.telnet = self.settings['telnet']
+        self.telnet_parser = self.settings['telnet_parser']
         self.need_full_update = True
 
         user_id = self.get_secure_cookie("user")
         if user_id:
             self.current_user = yield self.db.players.find_one({'_id': int(user_id)})
 
+        # preload messages and store them in class-wide variable
         if WebSocket._cache is None:
             print 'WebSocket loading _cache'
             WebSocket._cache = []
@@ -61,19 +64,22 @@ class WebSocket(tornado.websocket.WebSocketHandler):
         text = u'%s entered the room' % self.name
         self.send_msg(text)
 
-        # send current user list to new user
-        users = []
-        self.send_msg(u'%d logged in user(s): %s' % (
-            len(sockets),
-            (', '.join(s.name for s in sockets.values() if s.name))),
-            to_all=False)
-
+        # send existing message to newly connected user
         if WebSocket._cache:
             for msg in WebSocket._cache:
                 text = u'%s %s: %s' % (msg['_id'].generation_time.strftime('%Y-%m-%d %H:%M:%Sz'), msg['u'], msg['msg'])
                 self.send_msg(text, to_all=False)
 
+        # send current user list to new user
+        users = []
+        self.send_msg(u'%d website user(s): %s' % (
+            len(sockets),
+            (', '.join(s.name for s in sockets.values() if s.name))),
+            to_all=False)
+
         sockets[self.sid] = self
+
+        self.telnet_parser.send_day_info()
 
 
     @gen.coroutine
@@ -139,7 +145,6 @@ class WebSocket(tornado.websocket.WebSocketHandler):
         for s in WebSocket.sockets.values():
             s.ping('ping')
 
-                       
     @gen.coroutine
     def on_close(self):
         print 'WebSocket closing', self.sid

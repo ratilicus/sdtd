@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 
-{% block title %}RaTilicus 7D2D About{% end %}
+{% block title %} | About{% end %}
 
 {% block head %}
 {% end %}
@@ -10,40 +10,56 @@
 {% end %}
 
 {% block body %}
-<br>
-<br>
+<h4>About</h4>
 
 Hi, I'm RaTilicus this is my website for the 7 Days To Die Server I am hosting.<br>
 The server is hosted on the same url as this 7d2d.ratilicus.com on port 25000.<br>
+<br>
+<h4>Server/Site Notes:</h4>
+<br>
+<b>We are currently using the Live Free or Die mod.</b><br>
+While stock client works fine for the most part, the additional content, like icons, do not show properly.<br>
+Also in some locations on the map you can get stuck with the console constantly scrolling an error message, and cannot be closed.<br>
+The solution is to install the mod. 
+Optionally, if you are logged in to this site, you can teleport yourself via this site, to a known safe location.<br>
+The Mod can be downloaded from here: <a href="https://7daystodie.com/forums/showthread.php?23773-Live-Free-or-Die">https://7daystodie.com/forums/showthread.php?23773-Live-Free-or-Die</a>.<br>
+The files need to be extracted into your 7 Days To Die directory, overriding some files.  (I recommend backing up before install)<br>
+<br>
+<i>Note: The server is currently running with Anti-Cheat off.  Since Alpha 11 release, my linux 32bit client of 7d2d doesn't start.<br>
+The 64bit client does work (currently), but it does not seem to support the Anti-Cheat, so I have to have it disabled, for now.</i><br>
 
+<br>
+The code that runs this site and map can be found on my github page: <a href="https://github.com/ratilicus/sdtd">https://github.com/ratilicus/sdtd</a>.<br>
+<br>
 Logins and passwords are offered to all players who enter the server in the welcome message.<br>
 There are a couple benefits to logging in such as:<br>
 <ul>
 <li>Logged in player can create personalized markers (Marker with their user name) that other users cannot remove</li>
-<li>Logged in player can create hidden markers (start the title of the marker with a '*' to make it hidden).
+<li>Logged in player can create hidden markers (start the title of the marker with a '*' to make it hidden).</li>
+<li>Logged in player can teleport to a chosen location at specified height.</li>
 <li>There are other planned features that will only be available to logged in players only.</li>
 </ul>
+
 <br>
 If you have any comments or suggestions feel free to contact me at <a href="mailto:rat@ratilicus.com">rat@ratilicus.com</a>.<br>
 <br>
 
-<h4>Map Legend<h4>
+<h4>Map Legend</h4>
 
 <ul>
-<li>green circles = players</li>
-<li>white circles = animals: deer, pigs, rabbits</li>
-<li>dark gray circles = dead/killed animals, players, zombies</li>
-<li>orange circles = zombies</li>
-<li>red circles = dangerous zombies: cop zombies, dogs</li>
+<li>green triangles = players</li>
+<li>white triangles = animals: deer, pigs, rabbits</li>
+<li>dark gray triangles = dead/killed animals, players, zombies</li>
+<li>orange triangles = zombies</li>
+<li>red triangles = dangerous zombies: cop zombies, dogs</li>
 <li>yellow squares = player made markers<br>
 - click on marker to view details<br>
 - click anywhere on map to create a marker<br>
 - to create a private marker only you can see put a * in front of the description (note: you have to be logged in)
 </li>
 <li>To log in type your in-game player name, and the 4 digit number in the welcome message in the game is the password.</li>
-<li>Note: The server is currently running with Anti-Cheat off.  Since Alpha 11 release, my linux 32bit client of 7d2d doesn't start.<br>
-The 64bit client does work (currently), but it does not seem to support the Anti-Cheat, so I have to have it disabled, for now.</li>
 </ul>
 
+<br>
 
 {% end %}

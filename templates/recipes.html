@@ -1,16 +1,13 @@
 {% extends "base.html" %}
 
-{% block title %}RaTilicus 7D2D Recipes{% end %}
+{% block title %} | Recipes{% end %}
 
 {% block head %}
 <script src="/static/underscore-min.js"></script>
-<script src="/static/recipes.js"></script>
+<script src="/static/recipes.js?t={{t}}"></script>
 {% end %}
 
 {% block body %}
-<br>
-<br>
-
 <H4>Recipes (from recipes.xml)</h4>
 <table style="width:90%;">
 <td style="width:30%;border: 1px solid;">

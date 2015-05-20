@@ -69,23 +69,16 @@ class GTCommand(CommandBase):
     cmd = 'gt'
     delay = 60
     allow_repeat = False
-    
+
     def process_line(self, ts, line):
         if line.startswith('Day '):
             print 'GT day ' + line
-            self.telnet_parser.day_info = '(%s)' % line
-
-            WebSocket.send_update({
-                'tt': 'ut',
-                'ut': line
-            })
-
-
+            self.telnet_parser.send_day_info(line)
             return False
         return True
 
 class LECommand(CommandBase):
-    entity_pat = re.compile('^.*type=([^,]+).*name=([^,]+).*id=(\d+).*pos=\((-?\d+\.\d+), (-?\d+\.\d+), (-?\d+\.\d+)\).*rot=\((-?\d+\.\d+), (-?\d+\.\d+), (-?\d+\.\d+)\).*dead=(True|False).*$')
+    entity_pat = re.compile('^.*type=([^,]+).*name=([^,]+).*id=(\d+).*pos=\((-?\d+\.\d+), (-?\d+\.\d+), (-?\d+\.\d+)\).*rot=\((-?\d+\.\d+), (-?\d+\.\d+), (-?\d+\.\d+)\).*dead=(True|False).*health=(\d+).*$')
     entities = {}
     old_entities = {}
     
@@ -125,9 +118,9 @@ class LECommand(CommandBase):
         try:
             if 'type=Entity' in line and not 'type=EntityCar' in line and not 'EntityItem' in line and 'dead=' in line:
                 pat_data = self.entity_pat.findall(line.strip())
-                type, name, eid, x, y, z, rx, ry, rz, dead = pat_data[0]
+                type, name, eid, x, y, z, rx, ry, rz, dead, health = pat_data[0]
                 eid=int(eid)
-                data = dict(id=eid, type=type, name=name, x=float(x), y=float(y), z=float(z), h=float(ry), dead=dead=='True')
+                data = dict(id=eid, type=type, name=name, x=float(x), y=float(y), z=float(z), h=float(ry), dead=dead=='True', health=int(health))
                 self.telnet_parser.entities[eid] = data
 
                 self.entities[eid] = data
@@ -179,6 +172,17 @@ class TelnetParser(object):
         # handle player messages
         # handle custom commands?
         
+
+    def send_day_info(self, day_info=None):
+        if day_info:
+            self.day_info = '%s' % day_info
+
+        print 'sdi', self.day_info, day_info
+        WebSocket.send_update({
+            'tt': 'ut',
+            'ut': self.day_info
+        })
+   
     ############# UPDATE ###############
 
     def __init__(self, db, telnet):

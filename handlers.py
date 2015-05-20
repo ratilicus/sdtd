@@ -49,6 +49,7 @@ class BaseHandler(tornado.web.RequestHandler):
 
     @gen.coroutine
     def render(self, template, **data):
+        data['t'] = self.settings['t']
         data['user'] = self.current_user
         if not 'username' in data:
             data['username'] = self.get_argument('username', '')
