@@ -5,7 +5,8 @@ function open_ws(reconnecting) {
         if (reconnecting) {
             // if it got disconnected, chances are good it's due to backend change.  
             // So, reload to pull in the latest changes
-            location.reload();        
+//            location.reload();
+            $('#chat-output div.btn-info').remove()
         }
     }
 
@@ -16,7 +17,7 @@ function open_ws(reconnecting) {
 
     window.ws.onmessage = function (evt) {
         json = JSON.parse(evt.data);
-        //console.log(json);
+        console.log(json);
         switch (json.tt) {
             case 'ue':
                 //console.log(json);
@@ -27,8 +28,10 @@ function open_ws(reconnecting) {
                 update_info();
                 break;
             case 'msg':
+            case 'post':
+            case 'info':
                 var out = $('#chat-output')
-                out.append($('<div class="btn-info">'+json.msg+'</div>'));
+                out.append($('<div class="'+(json.tt == 'post' ? 'btn-info' : (json.tt == 'msg' ? 'btn-default' : 'btn-success'))+'">'+json.msg+'</div>'));
                 out.scrollTop(out.prop("scrollHeight"));
                 break;
             case 'lr':
@@ -47,10 +50,18 @@ function init_ws() {
 
 function send() {
     if (window.ws) {
-        var ci = $('#chat-input');
+        var ci = $('#chat-input'),
+            msg = ci.val(),
+            tt = 'msg';
+
+        if (msg[0] == '*') {
+            msg = msg.slice(1);
+            tt = 'post'
+        }
+
         var json = JSON.stringify({
-            'tt': 'msg',
-            'msg': ci.val()        
+            'tt': tt,
+            'msg': msg        
         });
         window.ws.send(json);
         ci.val('');

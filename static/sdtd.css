@@ -9,12 +9,14 @@ ul.navbar-right {
 }
 
 #entity-info,
+#entity-info b,
 #location-info {
     height: 26px;
-    overflow-y: auto;
+    overflow-y: hidden;
     line-height:24px;
     font-size: 10pt;
 }
+
 
 /* map css */
 #map {
@@ -36,7 +38,7 @@ ul.navbar-right {
     border: 1px solid;
 }
 
-#chat-output div.btn-info {
+#chat-output div {
     font-weight: normal;
     font-size: 9pt;
 }

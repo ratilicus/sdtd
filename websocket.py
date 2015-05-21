@@ -38,7 +38,7 @@ class WebSocket(tornado.websocket.WebSocketHandler):
         if WebSocket._cache is None:
             print 'WebSocket loading _cache'
             WebSocket._cache = []
-            cursor = self.db.messages.find({'tt': 'msg'}, ['_id', 'msg', 'u'], sort=(('_id', 1),), limit=1000)
+            cursor = self.db.messages.find({'tt': 'post'}, ['_id', 'msg', 'u'], sort=(('_id', 1),), limit=1000)
             while (yield cursor.fetch_next):
                 WebSocket._cache.append(cursor.next_object())
             
@@ -62,20 +62,20 @@ class WebSocket(tornado.websocket.WebSocketHandler):
         else:
             self.name = 'Anonymous'  #self.request.headers['X-Real-Ip']
         text = u'%s entered the room' % self.name
-        self.send_msg(text)
+        self.send_msg(text, tt='info')
 
         # send existing message to newly connected user
         if WebSocket._cache:
             for msg in WebSocket._cache:
                 text = u'%s %s: %s' % (msg['_id'].generation_time.strftime('%Y-%m-%d %H:%M:%Sz'), msg['u'], msg['msg'])
-                self.send_msg(text, to_all=False)
+                self.send_msg(text, to_all=False, tt='post')
 
         # send current user list to new user
         users = []
         self.send_msg(u'%d website user(s): %s' % (
             len(sockets),
             (', '.join(s.name for s in sockets.values() if s.name))),
-            to_all=False)
+            to_all=False, tt='info')
 
         sockets[self.sid] = self
 
@@ -92,35 +92,37 @@ class WebSocket(tornado.websocket.WebSocketHandler):
             print 'on message: json_decode error: %s' % e
             return
 
+        tt = json['tt']
+
         json['_id'] = id = ObjectId()
         json['u'] = self.name
+        json['uid'] = self.current_user['_id'] if self.current_user else None
+        if tt == 'post' and not self.current_user:
+            json['tt'] = tt = 'msg'
+
         self.db.messages.insert(json)
-        if json['tt']=='msg':
+
+        if tt == 'post':
             WebSocket._cache.append(json)
 
-        tt = json['tt']
         text = ''
 
-        if tt == 'msg':
+        if tt == 'msg' or tt == 'post':
             text = u'%s %s: %s' % (id.generation_time.strftime('%Y-%m-%d %H:%M:%Sz'), self.name, json['msg'])
+            self.send_msg(text, tt=tt)
 
         elif tt == 'tp' and self.current_user:
             print 'teleporting %s to %s' % (self.current_user['_id'], json['tp'])
             self.telnet.write('tele %s %s 1500 %s\n' % (self.current_user['_id'], json['tp']['x'], json['tp']['z']))
             yield gen.sleep(0.75)
             self.telnet.write('tele %s %s %s %s\n' % (self.current_user['_id'], json['tp']['x'], json['tp']['y'], json['tp']['z']))
-            
-            
-        print text
-
-        if text:
             self.send_msg(text)
 
-    def send_msg(self, text, to_all=True):
+    def send_msg(self, text, to_all=True, tt='msg'):
         sockets = self.settings['sockets']
         if text:
             json = json_encode({
-                'tt': 'msg',
+                'tt': tt,
                 'msg': text
             })
             if to_all:
@@ -156,5 +158,5 @@ class WebSocket(tornado.websocket.WebSocketHandler):
         print 'WebSocket closed'
 
         text = u'%s left the room' % self.name
-        self.send_msg(text)
+        self.send_msg(text, tt='info')
 
