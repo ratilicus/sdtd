@@ -22,7 +22,6 @@ from bson import ObjectId
 from bson.json_util import loads as json_decode, dumps as json_encode
 from schemaforms import SchemaForm
 from tornado import gen
-import tornado.websocket
 
 
 class BaseHandler(tornado.web.RequestHandler):
@@ -49,6 +48,9 @@ class BaseHandler(tornado.web.RequestHandler):
 
     @gen.coroutine
     def render(self, template, **data):
+        ''' render template override
+        adds extra common template variables
+        '''
         data['t'] = self.settings['t']
         data['user'] = self.current_user
         if not 'username' in data:

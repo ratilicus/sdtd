@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
 '''
-7D2D map markers Tornado Server
+7D2D entities/map markers Tornado Server
 by: Adam Dybczak (RaTilicus)
 '''
 
@@ -13,7 +13,6 @@ from tornado import gen
 
 from handlers import IndexHandler, RecipesHandler, AboutHandler, LoginHandler, LogoutHandler, MarkerHandler
 from websocket import WebSocket
-#from ttelnet import SDTDTelnet
 import telnetlib
 from tparser import TelnetParser
 

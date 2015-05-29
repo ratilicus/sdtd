@@ -16,8 +16,8 @@ def get_recipes(xml):
         yield recipe
 
 recipes = [recipe
-           for recipe in get_recipes(xml=minidom.parse('Config/recipes.xml'))]
+           for recipe in get_recipes(xml=minidom.parse('/home/sdtd/engine/Data/Config/recipes.xml'))]
 recipes.sort(key=lambda r: r['name'])
-with open('static/recipes.json', 'w') as of:
+with open('/var/www/sdtd/static/recipes.json', 'w') as of:
     of.write(json.dumps(recipes))
 

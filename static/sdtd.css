@@ -1,6 +1,14 @@
+body {
+    font-size: 1.2em;
+}
+
 .navbar {
     margin-bottom: 0px;
 }
+.navbar a {
+    font-size: 1.5em;
+}
+
 ul.navbar-right {
     margin-right: 5px;
 }
@@ -11,14 +19,31 @@ ul.navbar-right {
 #entity-info,
 #entity-info b,
 #location-info {
-    height: 26px;
     overflow-y: hidden;
-    line-height:24px;
-    font-size: 10pt;
+    font-size: 1.1em;
+    line-height: 1.3em;
+    min-height: 1.5em;
 }
 
+#entity-info button {
+    padding: 0;
+    font-size: 1.1em;
+    line-height: 1.3em;
+}
 
-/* map css */
+div.chat-post {
+    background-color: #ddddff;
+    font-size: 0.9em ! important;
+}
+div.chat-msg {
+    background-color: #ffffff;
+    font-size: 1.1em;
+}
+div.chat-info {
+    background-color: #ffffdd;   
+    font-size: 1.1em;
+}
+
 #map {
     height: 550px; 
     cursor: crosshair;
@@ -38,28 +63,24 @@ ul.navbar-right {
     border: 1px solid;
 }
 
-#chat-output div {
-    font-weight: normal;
-    font-size: 9pt;
+#chat-input,
+#userlist {
+    width: 85%;
+    min-height: 3em;
+    line-height: 2em;
+    font-size: 1em;
 }
 
-#chat-input {
-    width: 100%;
+#userlist {
+    width:13%;
 }
 
-#info {
-    border: 1px solid #dddddd;
-    height:25px;
-}
-#info button {
-    padding: 0 5px;
-}
 #recipes div.selected {
     background-color:#ddddff;
 }
 
 #recipe .grid td {
-    font-size: 8pt;
+    font-size: 1.1em;
     text-align: center;
     border: 1px solid;
     width: 120px;

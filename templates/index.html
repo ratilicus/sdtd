@@ -42,7 +42,8 @@ function onkey(e, down) {
 <div id="map"></div>
 <div id="location-info"></div>
 <div id="chat-output"></div>
-<input type="text" id="chat-input" onkeydown="onkey(event, true);" placeholder="Type here to send a message (Note: Only messages prefixed with a '*' will be posted perminently, all other chat will be for currently logged in users only)">
+<input type="text" id="chat-input" onkeydown="onkey(event, true);" placeholder="Type here to send a message (Note: Prefix a message with a '*' to make a perminent post [logged in users only])">
+<select id="userlist"></select>
 
 <script type="text/template" class="entity_info_template">
 <b><%- day_info %></b> <% for(eid in players) { var player = players[eid]; %><button onclick="player_click(<%= eid %>)"><%- player.name %> [ <%- player.dead ? 'dead' : player.health %> ]</button><% } %>

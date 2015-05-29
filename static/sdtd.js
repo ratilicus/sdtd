@@ -2,12 +2,11 @@
 Code used for displaying dynamic entity markers and static player made markers.
 - Note: code in progress
 
-- currenty for dynamic markers a background server script using telnet probes 
-  for current entity positions and updates the entities.js file which we poll 
-  periodically.
+- backend is running on python based tornado server with mongodb for storage
+
+- entity markers are updated via websocket json updates.
   
-- static/player made markers are listed/created/deleted via tornado based 
-  server using mongodb for storage.
+- static/player made markers are listed/created/deleted via http requests
 
 - chat is websocket based
 
@@ -15,13 +14,20 @@ Code used for displaying dynamic entity markers and static player made markers.
 */
 var degRad = Math.PI/180
 
+function window_resize(e) {
+    var height = window.innerHeight - $('nav').height() - $('#entity-info').height() - $('#location-info').height() - $('#chat-input').height() - 12;
+    $('#map').css('height', Math.floor(height * 0.75) + 'px');
+    $('#chat-output').css('height', Math.floor(height * 0.25) + 'px');   
+}
+
 function init_map() {
+    // init/setup resize events to scale components based on window size
     window.onresize = window_resize
     window_resize();
+    window.setTimeout(window_resize, 1000);
 
     window.leafletMap = L.map('map', {
         crs: L.CRS.Simple,
-//        maxZoom: 5
     }).setView([0.0, 0.0], 0);
 
     window.leafletMapTileLayer = L.tileLayer('/static/map/{z}/{x}/{y}.png', {
@@ -36,8 +42,10 @@ function init_map() {
     });
 
     window.leafletMap.on('movestart', function(e) {
+        // if user manually pans the map disable the auto player centering
         window.clearTimeout(window.follow_timer);
     });
+
     /*
     window.leafletMapTileLayer.on('tileload', function(e) {
         console.log('tileload', e)
@@ -49,12 +57,7 @@ function init_map() {
     window.zombies = {};
     window.entity_markers={};
     window.setTimeout(redraw_map, 10000);
-}
-
-function window_resize(e) {
-    var height = window.innerHeight - $('nav').height() - $('#entity-info').height() - $('#location-info').height() - $('#chat-input').height() - 8;
-    $('#map').css('height', Math.floor(height * 0.75) + 'px');
-    $('#chat-output').css('height', Math.floor(height * 0.25) + 'px');
+    $('body').css('overflow', 'hidden');
 }
 
 function login_submit(e) {
@@ -64,6 +67,9 @@ function login_submit(e) {
 }
 
 function redraw_map() {
+    /* updates the tiles in the map
+    the builtin redraw command in leaflet js doesn't update the tiles properly
+    even with caching off so updating the t parameter at each update */
     var t = new Date().getTime();
     $('#map img').each(function(i, img) {
         src = img.src.split('?')[0]
@@ -76,6 +82,11 @@ function redraw_map() {
 }
 
 function player_click(eid) {
+    /* when player clicks on a name in entity/player list bar,
+    cener and zoom (if need be) on the player.
+    by default the timeout makes the map follow the player around periodically
+    until a user manually pans the map
+    */
     if (eid) {
         window.followPlayer = eid;
     } else {
@@ -86,7 +97,7 @@ function player_click(eid) {
     if (player) {
         window.leafletMap.panTo([player.z/8.0, player.x/8.0]);
         if (window.leafletMap.getZoom() < 3) {
-            window.leafletMap.setZoom(3);
+            window.leafletMap.setZoom(4);
         }
         window.follow_timer = window.setTimeout(player_click, 250);
     }
@@ -94,21 +105,11 @@ function player_click(eid) {
 
 /* ======================= entity markers js =============================== */
 function add_entity_marker(x, y, z, h, name, opts) {
+    /* add entity/player markers
+    this creates a marker representing an entity/player as a triangle
+    oriented based on which direction the player is facing
+    */
     var lat = z/8.0, lng = x/8.0;
-    /*
-    // add a entity marker (circle)
-    var marker = L.circleMarker(
-        [lat, lng], 
-        opts || {}
-    ).addTo(window.leafletMap);
-    marker.bindPopup(name);
-
-    var lmarker = L.polyline(
-        [[lat, lng], [lat+Math.cos(h*degRad)*0.75, lng+Math.sin(h*degRad)*0.75]],
-        opts || {}
-    ).addTo(window.leafletMap);
-
-    return [marker, lmarker];*/
     var marker = L.polygon(
         [
             [lat+Math.cos((h-120)*degRad)*0.5, lng+Math.sin((h-120)*degRad)*0.5],
@@ -122,13 +123,8 @@ function add_entity_marker(x, y, z, h, name, opts) {
 }
 
 function update_entity_marker(em, x, y, z, h, color) {
+    /* updates the entity/player marker with new coords heading and color (if dead, etc) */
     var lat = z/8.0, lng = x/8.0;
-    /*
-    var marker = em[0];
-    var lmarker = em[1];
-    marker.setStyle({color:color})
-    marker.setLatLng([lat, lng])
-    lmarker.setLatLngs([[lat, lng], [lat+Math.cos(h*degRad)*0.5, lng+Math.sin(h*degRad)*0.5]]);*/
     em.setStyle({fillColor:color})
     em.setLatLngs(
         [
@@ -139,8 +135,8 @@ function update_entity_marker(em, x, y, z, h, color) {
     );
 }
 
-
 function update_info() {
+    /* updates the entity/player list bar and day time info */
     $('#entity-info').html(window.entity_info_template({
         day_info: window.day_info || '',
         players: players
@@ -148,6 +144,7 @@ function update_info() {
 }
 
 function remove_entities(entity_ids, exclude_ids) {
+    /* batch remove entity/player markers for any entities that are no longer in the server */
     for(i in entity_ids) {
         var id = entity_ids[i];
         if (!exclude_ids || exclude_ids.indexOf(id)==-1) {
@@ -162,18 +159,23 @@ function remove_entities(entity_ids, exclude_ids) {
 }
 
 function update_entities(entities, remove, full) {
-   
-    
+    /* batch update entities 
+    full parameter indicates if the update is full (all entities) or incremental (only some entities get updated)
+    */
     for(id in entities) {
         update_entity(entities[id]);
     }
     if (full) {
+        // remove all entities except the ones that were just updated
         remove_entities(Object.keys(window.entity_markers), Object.keys(entities));    
     } else
         remove_entities(remove);
 }
 
 function update_entity(e) {
+    /* setup/update one entity
+    figure out color based on status/type and create/update the marker
+    */
     var id = e.id;
 
     var is_player = false;
@@ -362,23 +364,3 @@ function remove_marker(marker_id) {
         dataType: "json"
     });
 }
-
-/* =============================== chat js ================================= */
-function init_chat() {
-    window.ws = new WebSocket("ws://7d2d.ratilicus.com/chat/");
-    window.ws.onopen = function() {
-       //window.ws.send('.');
-    };
-    window.ws.onmessage = function (evt) {
-       //alert(evt.data);
-       $('#ob').append(evt.data+'<br>')
-    };
-}
-
-function chat_send() {
-    if (window.ws) {
-        ws.send($('#ib').val());
-        $('#ib').val('');
-    }
-}
-

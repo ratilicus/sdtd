@@ -1,6 +1,12 @@
 '''
 7D2D map markers Tornado Server
 by: Adam Dybczak (RaTilicus)
+
+Note: the Telnet and Tornado/Websocket code have recently been merged to allow exciting possibilities
+like in game teleportation using web interface, updating entities via websocket push as opposed to polling ajax.
+In the future, other possibilities like game to web to game chat, etc.
+The code is in the process of being cleaned up, some things are done inconsistently or incorrectly
+(such as how Websocket commands are sent, etc.)  Please bear with me.
 '''
 
 import tornado.websocket
@@ -24,7 +30,7 @@ class WebSocket(tornado.websocket.WebSocketHandler):
         - set self.POST from request body, decode json if request is json
         '''
         print 'WebSocket prepare'
-        WebSocket.sockets = self.settings['sockets']
+        self.sockets = WebSocket.sockets = self.settings['sockets']
         self.db = self.settings['db']
         self.telnet = self.settings['telnet']
         self.telnet_parser = self.settings['telnet_parser']
@@ -51,7 +57,7 @@ class WebSocket(tornado.websocket.WebSocketHandler):
         
     @gen.coroutine
     def open(self):
-        sockets = self.settings['sockets']
+        #sockets = self.settings['sockets']
         self.sid = hash(self)
         self.name = None
         print 'WebSocket opened', self.sid
@@ -61,25 +67,33 @@ class WebSocket(tornado.websocket.WebSocketHandler):
             self.name = self.current_user['username']
         else:
             self.name = 'Anonymous'  #self.request.headers['X-Real-Ip']
-        text = u'%s entered the room' % self.name
-        self.send_msg(text, tt='info')
+        #text = u'%s entered the room' % self.name
+        #self.send_msg(text, tt='info')
 
         # send existing message to newly connected user
         if WebSocket._cache:
             for msg in WebSocket._cache:
                 text = u'%s %s: %s' % (msg['_id'].generation_time.strftime('%Y-%m-%d %H:%M:%Sz'), msg['u'], msg['msg'])
-                self.send_msg(text, to_all=False, tt='post')
+                self.send_msg(text, to_all=False, tt='post', id=msg['_id'])
 
-        # send current user list to new user
-        users = []
-        self.send_msg(u'%d website user(s): %s' % (
-            len(sockets),
-            (', '.join(s.name for s in sockets.values() if s.name))),
-            to_all=False, tt='info')
-
-        sockets[self.sid] = self
-
+        self.sockets[self.sid] = self
+        self.send_userlist()
         self.telnet_parser.send_day_info()
+
+    @gen.coroutine
+    def send_userlist(self):
+        # send current user list to new user
+        '''self.send_msg(u'%d website user(s): %s' % (
+            len(self.sockets),
+            (', '.join(s.name for s in self.sockets.values() if s.name))),
+            to_all=False, tt='info')'''
+        
+        WebSocket.send_update({
+            'tt': 'uu',
+            'uc': len(self.sockets),
+            'ul': [s.name for s in self.sockets.values() if s.name],
+        })
+
 
 
     @gen.coroutine
@@ -109,7 +123,11 @@ class WebSocket(tornado.websocket.WebSocketHandler):
 
         if tt == 'msg' or tt == 'post':
             text = u'%s %s: %s' % (id.generation_time.strftime('%Y-%m-%d %H:%M:%Sz'), self.name, json['msg'])
-            self.send_msg(text, tt=tt)
+            self.send_msg(text, tt=tt, id=id)
+
+        elif tt == 'cmd':
+            if json['msg'] == '/u':
+                self.send_userlist()
 
         elif tt == 'tp' and self.current_user:
             print 'teleporting %s to %s' % (self.current_user['_id'], json['tp'])
@@ -118,15 +136,16 @@ class WebSocket(tornado.websocket.WebSocketHandler):
             self.telnet.write('tele %s %s %s %s\n' % (self.current_user['_id'], json['tp']['x'], json['tp']['y'], json['tp']['z']))
             self.send_msg(text)
 
-    def send_msg(self, text, to_all=True, tt='msg'):
-        sockets = self.settings['sockets']
+    def send_msg(self, text, to_all=True, tt='msg', id=''):
+        #sockets = self.settings['sockets']
         if text:
-            json = json_encode({
+            json = {
                 'tt': tt,
-                'msg': text
-            })
+                'msg': text,
+                'id': str(id),
+            }
             if to_all:
-                for s in sockets.values():
+                for s in self.sockets.values():
                     s.write_message(json)
             else:
                 self.write_message(json)
@@ -151,12 +170,12 @@ class WebSocket(tornado.websocket.WebSocketHandler):
     def on_close(self):
         print 'WebSocket closing', self.sid
 
-        sockets = self.settings['sockets']
-        if self.sid in sockets:
-            del sockets[self.sid]
+        #sockets = self.settings['sockets']
+        if self.sid in self.sockets:
+            del self.sockets[self.sid]
 
         print 'WebSocket closed'
 
-        text = u'%s left the room' % self.name
-        self.send_msg(text, tt='info')
-
+        #text = u'%s left the room' % self.name
+        #self.send_msg(text, tt='info')
+        self.send_userlist()

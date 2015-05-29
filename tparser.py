@@ -1,7 +1,16 @@
 '''
 7D2D map markers Tornado Server
 by: Adam Dybczak (RaTilicus)
+
+Note: the Telnet and Tornado/Websocket code have recently been merged to allow exciting possibilities
+like in game teleportation using web interface, updating entities via websocket push as opposed to polling ajax.
+In the future, other possibilities like game to web to game chat, etc.
+The code is in the process of being cleaned up, some things are done inconsistently or incorrectly
+(such as how Websocket commands are sent, etc.)  Please bear with me.
 '''
+
+# message of the day (for announcing mod updates, map resets, etc)
+MOTD = ''
 
 import time
 import random
@@ -12,9 +21,9 @@ from websocket import WebSocket
 import traceback
 
 class CommandBase(object):
-    cmd = ''
-    delay = 1
-    allow_repeat = True
+    ''' base class for commands that can be sent via telnet to game server '''
+    cmd = ''        # command name
+    delay = 1       # min number of seconds between sending the command
     
     def __init__(self, db, telnet, ts, telnet_parser):
         self.db = db
@@ -24,15 +33,19 @@ class CommandBase(object):
         self.telnet_parser = telnet_parser
 
     def reset(self):
+        ''' reset command status, if command times out, etc '''
         self.processing_flag = False
 
     def ready(self, ts):
+        ''' returns True if command is ready to process '''
         return not self.processing_flag and ts > self.next
 
     def done(self):
+        ''' returns True if command is done processing '''
         return not self.processing_flag
 
     def send(self, ts):
+        ''' send command and init processing state '''
         if self.processing_flag:
             raise Exception('calling send on %s while processing' % self)
             
@@ -57,18 +70,23 @@ class CommandBase(object):
         return self.processing_flag
 
     def pre_send(self, ts):
-        'OVERRIDE THIS: runs at send time'
+        ''' any code you need to run before send
+        OVERRIDE THIS, IF NEED BE
+        '''
         pass
 
     def process_line(self, ts, line):
-        'OVERRIDE THIS: process line, return True if expecting more lines, False if done'
+        ''' processes a line from telnet
+        return True if expecting more lines, False if done
+        OVERRIDE THIS
+        '''
         return False
 
 
 class GTCommand(CommandBase):
+    ''' get time command '''
     cmd = 'gt'
     delay = 60
-    allow_repeat = False
 
     def process_line(self, ts, line):
         if line.startswith('Day '):
@@ -78,6 +96,10 @@ class GTCommand(CommandBase):
         return True
 
 class LECommand(CommandBase):
+    ''' list entities command 
+    gets the list of entities and compiles a partial and full update list,
+    send_update sends the proper version based on websock client needs.
+    '''
     entity_pat = re.compile('^.*type=([^,]+).*name=([^,]+).*id=(\d+).*pos=\((-?\d+\.\d+), (-?\d+\.\d+), (-?\d+\.\d+)\).*rot=\((-?\d+\.\d+), (-?\d+\.\d+), (-?\d+\.\d+)\).*dead=(True|False).*health=(\d+).*$')
     entities = {}
     old_entities = {}
@@ -86,15 +108,16 @@ class LECommand(CommandBase):
     delay = 1
 
     def pre_send(self, ts):
+        # reset entity status
         self.old_entities = self.entities
         self.entities = {}
         self.updates = {}
         self.telnet_parser.entities.clear()
-        self.telnet_parser.update_entities_flag = False
         
 
     def process_line(self, ts, line):    
         if line.startswith('Total of '):
+            # found last line of the telnet output, send partial and full entity updates, and removes
             remove_entities = list(set(self.old_entities.keys()) - set(self.entities.keys()))
             print 'send update: s: %d e: %d u: %d r: %d' % (len(WebSocket.sockets), len(self.entities), len(self.updates), len(remove_entities))
             WebSocket.send_update(
@@ -112,10 +135,10 @@ class LECommand(CommandBase):
                 reset_flag=True
             )
 
-            #self.telnet_parser.update_entities()
             return False
         
         try:
+            # process the line from telnet
             if 'type=Entity' in line and not 'type=EntityCar' in line and not 'EntityItem' in line and 'dead=' in line:
                 pat_data = self.entity_pat.findall(line.strip())
                 type, name, eid, x, y, z, rx, ry, rz, dead, health = pat_data[0]
@@ -125,27 +148,31 @@ class LECommand(CommandBase):
 
                 self.entities[eid] = data
 
+                # if the entity is new or changed position/etc add it to updates dict
                 if not eid in self.old_entities or self.old_entities[eid] != data:
                     self.updates[eid] = data
 
-                '''if type=='EntityPlayer':
-                    if eid in self.telnet_parser.players:
-                        self.update_player(eid, data, ts)
-                    else:
-                        data.update(md=0, ts=ts, dts=0, new=True)
-                        self.telnet_parser.players[eid] = data'''
         except Exception, e:
             print 'LE ERROR: findall: %r> %s \n %s \n %s' % (e, repr(line), pat_data, traceback.print_exc())
 
         return True
 
-class TelnetParser(object):
-    player_connected_pat = re.compile(r'entityid=(\d+), name=([^,]+), steamid=(\d+)')
 
-    ############### INF ################
+class TelnetParser(object):
+    ''' Parses Telnet information and sends commands
+    There are 2 basic communications related to telnet
+    - parsing INF entries
+    - sending commands and parsing the returned data    
+    
+    '''
+    player_connected_pat = re.compile(r'entityid=(\d+), name=([^,]+), steamid=(\d+)')
 
     @gen.coroutine
     def player_connected(self, line):
+        ''' handle player connections
+        - create the player entry if need be
+        - send website login info and MOTD
+        '''
         entity_id, username, steam_id = self.player_connected_pat.findall(line[50:])[0]
         player = yield self.db.players.find_one({'_id': int(steam_id)})
         print 'PLAYER CONNECTED', entity_id, username, steam_id, player
@@ -163,9 +190,12 @@ class TelnetParser(object):
         self.telnet.write('pm %s "7d2d.ratilicus.com (u: %s p: %s)"\n' % (entity_id, username, password))
         self.telnet.write('pm %s "Please go to that site and read the notes."\n' % (entity_id))
         self.telnet.write('pm %s "Please install the Live Free or Die mod to avoid nasty problems."\n' % (entity_id))
+        if MOTD:
+            self.telnet.write('pm %s "%s"\n' % (entity_id, MOTD))
 
 
     def parse_INF(self, line):
+        ''' INF handler '''
         # handle player login
         if 'Player connected' in line:
             self.player_connected(line)
@@ -174,6 +204,7 @@ class TelnetParser(object):
         
 
     def send_day_info(self, day_info=None):
+        ''' send day time info.. called from GT command '''
         if day_info:
             self.day_info = '%s' % day_info
 
@@ -202,19 +233,14 @@ class TelnetParser(object):
         self.current_command = None
 
     def send_command(self):
-        #print 'send_command', self.current_command, self.current_command.done() if self.current_command else 'N/A'
         if not self.current_command or self.current_command.done():
             for cmd in self.commands:
-                #print  'cmd', cmd.ready(self.ts), cmd.processing_flag, self.ts, cmd.next
                 if cmd.ready(self.ts):
                     self.last_cmd = cmd.cmd
                     self.current_command_loops = 0
                     self.current_command = cmd
                     self.current_command.send(self.ts)
                     return
-            #print 'no ready commands to send (cur: %s)' % self.current_command
-        #else:
-        #    print 'current command %s not done?' % self.current_command        
 
     def process_command(self, line):
         if self.current_command and not self.current_command.done():
@@ -226,17 +252,31 @@ class TelnetParser(object):
 
     @gen.coroutine
     def reset_current_command(self, reason='N/A'):
+        ''' reset current command helper 
+        - log reason for reset
+        - reset command status and que
+        - reconnect telnet (resets are usually due to timeout/telnet disconnect)
+        '''
         print 'resetting current command: %s' % reason
+
         self.telnet.open(self.telnet.host, self.telnet.port)
         yield gen.sleep(2)
+
         self.blank_line_count = 0
         self.current_command_loops = 0
         self.current_command.reset()
         self.current_command = None
             
     def update(self):
+        ''' update/process telnet parser
+        this gets called periodically (in sdtd-tornado.py)
+        - all tparser processes are updated from this
+        - sends commands
+        - gets data from telnet
+        - passes data to current command
+        - checks for timeouts
+        '''
         self.ts = int(time.time())
-        #print 'update', self.ts
         self.send_command()
         lines = self.telnet.read_very_eager()
 
@@ -253,31 +293,13 @@ class TelnetParser(object):
 
         return True
 
-    @gen.coroutine
-    def parse_ttelnet(self):
-        self.ts = int(time.time())
-        self.send_command()
-        line = yield self.telnet.stream.read_until('\n')
-        self.update_line(line)
-
     def update_line(self, line):
-        #print 'update_line', line
+        ''' updates/parses one telnet line at a time
+        sends the data to INF handler or command handler
+        '''
         if line:
             if ' INF ' in line:
                 self.parse_INF(line)
             else:
                 self.process_command(line)
 
-    def update_entities(self):
-        '''for id, player in list(self.players.items()):
-            # if last update of player is more than n sec remove from list (logged out)
-            if player['dts'] > 10:
-                self.players.pop(id)'''
-
-        #print 'update_entities: players: %d, entities: %d' % (len(self.players), len(self.entities))
-                    
-        with open('/var/www/sdtd/static/entities.js', 'w') as of:
-            of.write(json_encode(dict(
-                day_info=self.day_info, 
-                refresh_rate=2, 
-                entities=self.entities)))

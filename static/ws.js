@@ -1,40 +1,65 @@
+/*
+Code used for websocket communications
+- Note: code in progress
+
+- communications are sent back and forth using json
+
+- backend is running on python based tornado server with mongodb for storage
+
+- entity markers are updated via websocket json updates.
+  
+- chat is websocket based
+
+- Author: Adam Dybczak (RaTilicus)
+*/
 function open_ws(reconnecting) {
+    /* initialize websocket connection */
     window.ws = new WebSocket("ws://7d2d.ratilicus.com/ws/");
     window.ws.onopen = function() {
-        console.log('opened');
+        console.log('ws opened');
         if (reconnecting) {
-            // if it got disconnected, chances are good it's due to backend change.  
-            // So, reload to pull in the latest changes
-//            location.reload();
-            $('#chat-output div.btn-info').remove()
+            // if it got disconnected, and now reconnecting, the server will resend all the info except chat
+            // So, we have to remove those so we don't have duplicates
+            $('#chat-output div.chat-post').remove()
+            $('#chat-output div.chat-info').remove()
         }
     }
 
     window.ws.onclose = function() {
+        /* connection was lost, so reconnect */
         console.log('closed.. reopening');
         open_ws(true);
     }
 
     window.ws.onmessage = function (evt) {
+        /* message was received from server, process it */
         json = JSON.parse(evt.data);
-        console.log(json);
+        //console.log(json);
         switch (json.tt) {
-            case 'ue':
+            case 'ue':  // update entities
                 //console.log(json);
                 update_entities(json.ue, json.re, json.full);
                 break;
-            case 'ut':
+            case 'uu':  // update users list
+                var ul = $('#userlist');
+                ul.find('option').remove();
+                ul.append('<option>'+json.uc+' users</option>');
+                for(i in json.ul) {
+                    ul.append('<option>'+json.ul[i]+'</option>');                    
+                }
+                break;
+            case 'ut':  // update time
                 window.day_info = json.ut
                 update_info();
                 break;
-            case 'msg':
-            case 'post':
-            case 'info':
+            case 'msg':     // chat message received (chat message that only exists for currently logged in users)
+            case 'post':    // post message received (perminent message)
+            case 'info':    // info message received (since user list was introduced there is no more user entered/left the room messages)
                 var out = $('#chat-output')
-                out.append($('<div class="'+(json.tt == 'post' ? 'btn-info' : (json.tt == 'msg' ? 'btn-default' : 'btn-success'))+'">'+json.msg+'</div>'));
+                out.append('<div mid="'+json.id+'" class="chat-'+ (json.tt || 'info') +'" onclick="msg_click(this)">'+json.msg+'</div>');
                 out.scrollTop(out.prop("scrollHeight"));
                 break;
-            case 'lr':
+            case 'lr':      // reload page command (not used yet, potentially necessary to update css/js on client side)
                 location.reload();
                 break;
             default:
@@ -43,25 +68,37 @@ function open_ws(reconnecting) {
     }
 }
 
+function msg_click(el) {
+    /* mark selected message (not used yet) */
+    console.log(el);
+    window.selected_message = el.attributes.mid.value || null;
+}
+
 function init_ws() {
     window.username = 'User'
     open_ws();
 }
 
 function send() {
+    /* send chat message */
     if (window.ws) {
         var ci = $('#chat-input'),
             msg = ci.val(),
             tt = 'msg';
 
         if (msg[0] == '*') {
+            /* for now * marks posts as opposed to chat messages */
             msg = msg.slice(1);
             tt = 'post'
+        } else if (msg[0] == '/') {
+            /* '/' indicates command (not used yet), planned to use commands for posts, removing messages, etc */
+            tt = 'cmd'
         }
 
         var json = JSON.stringify({
             'tt': tt,
-            'msg': msg        
+            'msg': msg,
+            'sm': window.selected_message
         });
         window.ws.send(json);
         ci.val('');
@@ -70,15 +107,13 @@ function send() {
 
 
 function teleport(x, z) {
-    /*
-    add a player made marker
-    */
+    /* send a teleport player command */
 
     if (window.ws) {
-        var h = prompt("Please set height for teleport (range 3-128, 64=water level, warning: if u tp into an object you will probably die)");
+        var h = prompt("Please set height for teleport (range 3-256, 64=water level, warning: if u tp into an object you will probably die)");
         if (h) {
             var y = 1*h;
-            if(y >=3 && y <=128) {
+            if(y >=3 && y <=256) {
                 var json = JSON.stringify({
                     'tt': 'tp',
                     'tp': {
@@ -89,7 +124,7 @@ function teleport(x, z) {
                 });
                 window.ws.send(json);
             } else {
-                alert('Height ' + h + ' not within 3 and -128')            
+                alert('Height ' + h + ' not within 3 and 256')            
             }
         }
     }
