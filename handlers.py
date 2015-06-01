@@ -173,7 +173,7 @@ class MarkerHandler(BaseHandler):
         while (yield cursor.fetch_next):
             marker = cursor.next_object()
             marker['id'] = str(marker.pop('_id'))
-            marker['o'] = self.current_user and (marker.get('eid')==self.current_user['eid']) or False
+            marker['o'] = self.current_user and (marker.get('username')==self.current_user['username']) or False
             markers.append(marker)
 
         self.json_response(data=markers, success=True)
@@ -190,6 +190,7 @@ class MarkerHandler(BaseHandler):
             data['_id'] = ObjectId()            
             if self.current_user:
                 # create user owned marker
+                data['uid'] = self.current_user['_id']
                 data['eid'] = self.current_user['eid']
                 data['username'] = self.current_user['username']
             else:

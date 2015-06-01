@@ -132,7 +132,7 @@ class WebSocket(tornado.websocket.WebSocketHandler):
         elif tt == 'tp' and self.current_user:
             print 'teleporting %s to %s' % (self.current_user['_id'], json['tp'])
             self.telnet.write('tele %s %s 1500 %s\n' % (self.current_user['_id'], json['tp']['x'], json['tp']['z']))
-            yield gen.sleep(0.75)
+            yield gen.sleep(1.5)
             self.telnet.write('tele %s %s %s %s\n' % (self.current_user['_id'], json['tp']['x'], json['tp']['y'], json['tp']['z']))
             self.send_msg(text)
 

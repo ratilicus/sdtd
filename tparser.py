@@ -174,19 +174,26 @@ class TelnetParser(object):
         - send website login info and MOTD
         '''
         entity_id, username, steam_id = self.player_connected_pat.findall(line[50:])[0]
-        player = yield self.db.players.find_one({'_id': int(steam_id)})
+        entity_id = int(entity_id)
+        steam_id = int(steam_id)
+        player = yield self.db.players.find_one({'_id': steam_id})
         print 'PLAYER CONNECTED', entity_id, username, steam_id, player
         
         if not player:
             password = '%04d' % random.randrange(0, 9999)
             self.db.players.insert({
-                '_id': int(steam_id),
-                'eid': int(entity_id),
+                '_id': steam_id,
+                'eid': entity_id,
                 'username': username,
                 'password': password,
+                'last_login': int(time.time())
             })
         else:
             password = str(player['password'])
+            self.db.players.update({'_id': steam_id}, {'$set': {
+                'eid': entity_id,
+                'last_login': int(time.time())
+            }})
         self.telnet.write('pm %s "7d2d.ratilicus.com (u: %s p: %s)"\n' % (entity_id, username, password))
         self.telnet.write('pm %s "Please go to that site and read the notes."\n' % (entity_id))
         self.telnet.write('pm %s "Please install the Live Free or Die mod to avoid nasty problems."\n' % (entity_id))

@@ -103,7 +103,26 @@ function player_click(eid) {
     }
 }
 
-/* ======================= entity markers js =============================== */
+function click_marker(e) {
+    // display the description of POI marker
+    var marker = e.target,
+        options = marker.options;
+    $('#location-info').html(options.desc);
+}
+
+function click_entity_marker(ev, en) {
+    // display description of player marker
+    var e = en || ev.target.options.entity,
+        desc = '['+e.x+', '+e.y+', '+e.z+'] '+e.name;
+    console.log(e.id, USER.eid);
+    if (e.id == USER.eid) {
+        desc = '['+e.x+', '+e.y+', '+e.z+'] '+e.name + ' (you) '
+    }
+    
+    $('#location-info').html(desc);
+}
+
+
 function add_entity_marker(x, y, z, h, name, opts) {
     /* add entity/player markers
     this creates a marker representing an entity/player as a triangle
@@ -119,13 +138,14 @@ function add_entity_marker(x, y, z, h, name, opts) {
         opts || {}
     ).addTo(window.leafletMap);
     marker.bindPopup(name);
+    marker.on('click', click_entity_marker);
     return marker
 }
 
 function update_entity_marker(em, x, y, z, h, color) {
     /* updates the entity/player marker with new coords heading and color (if dead, etc) */
     var lat = z/8.0, lng = x/8.0;
-    em.setStyle({fillColor:color})
+    em.setStyle({fillColor: color})
     em.setLatLngs(
         [
             [lat+Math.cos((h-120)*degRad)*0.75, lng+Math.sin((h-120)*degRad)*0.75],
@@ -235,7 +255,10 @@ function update_entity(e) {
                 color: '#000000',
                 fillColor: color, 
                 fillOpacity: is_player ? 0.75 : 0.5, 
-                zIndexOffset: is_player ? 1000 : 100
+                zIndexOffset: is_player ? 1000 : 100,
+                is_player: is_player,
+                entity: e,
+                desc: e.name + (is_player ? '' : ' [ ' + e.type + ' ]')
             }
         )
         update_info();
@@ -246,16 +269,43 @@ function update_entity(e) {
 Place Markers based on AJAX calls
 TODO: add different kinds of markers (different shapes, sizes, and colors)
 */
-function add_marker(x, y, z, name, opts) {
+function add_marker(x, y, z, name, type, opts) {
     // create a static marker (square)
     var lat = z/8.0, lng = x/8.0;
-    var marker = L.polygon([
-        [lat-1.0, lng-1.0],
-        [lat+1.0, lng-1.0],
-        [lat+1.0, lng+1.0],
-        [lat-1.0, lng+1.0]
-    ], opts || {}).addTo(window.leafletMap);
-    marker.bindPopup(name);
+    switch(type) {
+        case 'poi':
+            var latlngs=[
+                [lat-1.0, lng-1.0],
+                [lat+1.0, lng-1.0],
+                [lat+1.0, lng+1.0],
+                [lat-1.0, lng+1.0]
+            ]
+            break;
+        case 'private':
+            var latlngs=[
+                [lat, lng-1.0],
+                [lat+1.0, lng],
+                [lat, lng+1.0],
+                [lat-1.0, lng]
+            ]
+            break;
+        case 'tp':
+            var latlngs=[
+                [lat+1.0, lng+0.75],
+                [lat, lng+0.25],
+                [lat-1.0, lng+0.75],
+                [lat-1.0, lng-0.75],
+                [lat, lng-0.25],
+                [lat+1.0, lng-0.75],
+            ]
+            break;
+    }        
+    var marker = L.polygon(latlngs, opts || {});
+    
+    marker.addTo(window.leafletMap);
+    //marker.bindPopup(name);
+    marker.on('click', click_marker);
+    //console.log(marker);
     return marker;
 }
 
@@ -277,20 +327,30 @@ function get_markers() {
         for(id in data) {
             var e = data[id];
             // create
-            color = e.private ? '#00ff00' : '#ffff00';
             var NSEW = Math.abs(e.z*8)+ (e.z>=0 ? " N ": " S ") +
                Math.abs(e.x*8)+ (e.x>=0 ? " E": " W");
 
-            var desc = "["+NSEW+"] ("+ 
-                        (e.public ? 'public' : 'private' ) +") <br>" + 
-                        e.desc + "<br><br>" +
-                        "- " + (e.username || 'Anonymous') + 
-                        ((e.o || !e.username) ? 
-                        "<br><button onclick=\"remove_marker('"+
-                        e.id+"')\">Remove</button>" : "");
+            var desc =  ((e.o || !e.username) ? 
+                        "<button onclick=\"remove_marker('"+
+                        e.id+"')\">Remove</button>" : "") + "&nbsp;" + 
+                        e.desc + (e.public ? '' : ' <sup>(private)</sup>' ) + 
+                        " <sub>- added by " + (e.username || 'Anonymous') + "</sub>";
             
-            window.place_markers[e.id] = add_marker(e.x, e.y, e.z, desc, {color: color})
-        };
+            window.place_markers[e.id] = add_marker(
+                e.x, e.y, e.z, 
+                desc, 
+                e.type || e.public ? 'poi': 'private',
+                {
+                    weight: 2,
+                    opacity: 0.5,
+                    color: e.public ? '#ffff00': '#00ff00',
+                    fillOpacity: 0.35, 
+                    zIndexOffset: 0,
+                    entity: e,
+                    desc: desc
+                }
+            );
+        }
     }, "json").fail(function(a,b,c) {console.log('error', a,b,c)});
 }
 
@@ -302,6 +362,26 @@ function show_spot_info(e) {
     var lng = Math.floor(e.latlng.lng*8);
     var NSEW = Math.abs(lat)+ (lat>=0 ? " N ": " S ") +
                Math.abs(lng)+ (lng>=0 ? " E ": " W ");
+
+    // create/update cursor
+    if (window.cursor_marker) {
+        window.leafletMap.removeLayer(window.cursor_marker);
+    }
+    window.cursor_marker = L.circleMarker(
+        [e.latlng.lat, e.latlng.lng],
+        {
+            color: '#ffffff', 
+            opacity: .25, 
+            weight: 15,
+            fillColor: '#ffffff', 
+            fillOpacity: 0.5,
+            clickable: false
+        }
+    )
+    window.cursor_marker.setRadius(3);
+    window.cursor_marker.addTo(window.leafletMap);
+
+    // show location info
     $('#location-info').html(window.spot_info_template({NSEW: NSEW, lat: lat, lng: lng}));
 }
 
@@ -326,19 +406,35 @@ function create_marker(lat, lng) {
         public_marker = false;
         desc=desc.slice(1);
     }
+    create_marker_ajax(lng, 0, lat, 'poi', desc, public_marker);
+}
+
+function create_marker_button(lat, lng) {
+    var desc = $('#create-marker-name').val(),
+        is_public = USER.id ? true : ! $('#create-marker-private').prop('checked');
+    if (desc) {
+        create_marker_ajax(lng, 0, lat, 'poi', desc, is_public);
+        $('#marker-modal').modal('hide')
+    } else {
+        $('#create-marker-name').css('borderColor', 'red');
+    }
+}
+
+function create_marker_ajax(x, y, z, type, desc, is_public) {
 
     $.ajax({
         url: "/markers/?ts="+ new Date().getTime(),
         data: JSON.stringify({
-            z: lat,
-            x: lng,
-            y: 0,
+            x: x,
+            y: y,
+            z: z,
+            type: type,
             desc: desc,
-            public: public_marker
+            public: is_public
         }),
         method: "POST",
         success: function(in_data) {
-            get_markers();
+            window.setTimeout(get_markers, 500);
         }, 
         error: function(a,b,c) {
             console.log('error', a,b,c)

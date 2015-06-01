@@ -10,6 +10,15 @@
 {% end %}
 
 {% block script %}
+
+var USER = {
+    {% if user %}
+        id: {{ user['_id'] }},
+        eid: {{ user['eid'] }},
+        username: "{{ user['username'] }}"
+    {% end %}
+}
+
 function start() {
     init_map();
     //get_entities();
@@ -50,13 +59,37 @@ function onkey(e, down) {
 </script>
 
 <script type="text/template" class="spot_info_template">
-<button onclick="create_marker(<%= lat %>, <%= lng %>)">Create a Marker</button>
+<button type="button" class="" data-toggle="modal" data-target="#marker-modal">Create a Marker</button>
 {% if user %}
 <button onclick="teleport(<%= lng %>, <%= lat %>)">Teleport</button>
 {% end %}
 <%= NSEW %> Coord: (<%= lng %>, ?, <%= lat %>) 
 Region: (<%= Math.floor(lng/512) %>, <%= Math.floor(lat/512) %>)
 Sector: (<%= Math.floor((lng<0 ? 32: 0)+lng%512/16) %>, <%= Math.floor((lat<0 ? 32: 0)+lat%512/16) %>)
+
+<div class="modal fade" id="marker-modal" tabindex="-1" role="dialog" aria-labelledby="marker-modal-label" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+        <h4 class="modal-title" id="marker-modal-label">Create a Marker</h4>
+      </div>
+      <div class="modal-body">
+      <div class="row">
+      <label for="create-marker-name" class="col-md-2">Name:</label> <input type="text" id="create-marker-name" class="col-md-9">
+      </div>
+      {% if user %}<div class="row">
+      <div class="col-md-10"><input type="checkbox" id="create-marker-private"> <label for="create-marker-private">Private Marker</label></div>
+      </div>{% end %}
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+        <button type="button" class="btn btn-primary" onclick="create_marker_button(<%= lat %>, <%= lng %>)">Create Marker</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 </script>
 
 {% end %}
