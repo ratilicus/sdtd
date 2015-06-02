@@ -20,7 +20,8 @@ class WebSocket(tornado.websocket.WebSocketHandler):
     name = None
 
     sockets = {}
-    _cache = None
+    _cache = []
+    _cache_loaded = False
 
     @gen.coroutine
     def prepare(self):
@@ -41,15 +42,19 @@ class WebSocket(tornado.websocket.WebSocketHandler):
             self.current_user = yield self.db.players.find_one({'_id': int(user_id)})
 
         # preload messages and store them in class-wide variable
-        if WebSocket._cache is None:
-            print 'WebSocket loading _cache'
-            WebSocket._cache = []
-            cursor = self.db.messages.find({'tt': 'post'}, ['_id', 'msg', 'u'], sort=(('_id', 1),), limit=1000)
-            while (yield cursor.fetch_next):
-                WebSocket._cache.append(cursor.next_object())
-            
+        if not WebSocket._cache_loaded:
+            self.preload_cache()
 
         print 'WebSocket prepared'
+
+    @gen.coroutine
+    def preload_cache(self):
+        print 'WebSocket loading _cache'
+        WebSocket._cache_loaded = True
+        del WebSocket._cache[:]
+        cursor = self.db.messages.find({'tt': 'post'}, ['_id', 'uid', 'msg', 'u'], sort=(('_id', 1),), limit=1000)
+        while (yield cursor.fetch_next):
+            WebSocket._cache.append(cursor.next_object())
 
 #    def check_origin(self, origin):
 #        print 'origin_check', origin
@@ -70,12 +75,6 @@ class WebSocket(tornado.websocket.WebSocketHandler):
         #text = u'%s entered the room' % self.name
         #self.send_msg(text, tt='info')
 
-        # send existing message to newly connected user
-        if WebSocket._cache:
-            for msg in WebSocket._cache:
-                text = u'%s %s: %s' % (msg['_id'].generation_time.strftime('%Y-%m-%d %H:%M:%Sz'), msg['u'], msg['msg'])
-                self.send_msg(text, to_all=False, tt='post', id=msg['_id'])
-
         self.sockets[self.sid] = self
         self.send_userlist()
         self.telnet_parser.send_day_info()
@@ -93,8 +92,6 @@ class WebSocket(tornado.websocket.WebSocketHandler):
             'uc': len(self.sockets),
             'ul': [s.name for s in self.sockets.values() if s.name],
         })
-
-
 
     @gen.coroutine
     def on_message(self, message):
@@ -123,11 +120,21 @@ class WebSocket(tornado.websocket.WebSocketHandler):
 
         if tt == 'msg' or tt == 'post':
             text = u'%s %s: %s' % (id.generation_time.strftime('%Y-%m-%d %H:%M:%Sz'), self.name, json['msg'])
-            self.send_msg(text, tt=tt, id=id)
+            self.send_msg(text, tt=tt, id=id, uid=json['uid'])
 
         elif tt == 'cmd':
-            if json['msg'] == '/u':
-                self.send_userlist()
+            print 'commmand: ', json
+            if json['msg'] == '/posts':
+                # send existing message to newly connected user
+                if WebSocket._cache:
+                    for msg in WebSocket._cache:
+                        text = u'%s %s: %s' % (msg['_id'].generation_time.strftime('%Y-%m-%d %H:%M:%Sz'), msg['u'], msg['msg'])
+                        self.send_msg(text, to_all=False, tt='post', id=msg['_id'], uid=msg['uid'])
+            elif json['msg'] == '/rm':
+                if self.current_user:
+                    remove_message = self.db.messages.remove({'uid': self.current_user['_id'], '_id': ObjectId(json['sm'])})
+                    yield remove_message
+                    self.preload_cache()
 
         elif tt == 'tp' and self.current_user:
             print 'teleporting %s to %s' % (self.current_user['_id'], json['tp'])
@@ -136,13 +143,14 @@ class WebSocket(tornado.websocket.WebSocketHandler):
             self.telnet.write('tele %s %s %s %s\n' % (self.current_user['_id'], json['tp']['x'], json['tp']['y'], json['tp']['z']))
             self.send_msg(text)
 
-    def send_msg(self, text, to_all=True, tt='msg', id=''):
+    def send_msg(self, text, to_all=True, tt='msg', id='', uid=None):
         #sockets = self.settings['sockets']
         if text:
             json = {
                 'tt': tt,
                 'msg': text,
                 'id': str(id),
+                'uid': uid,
             }
             if to_all:
                 for s in self.sockets.values():

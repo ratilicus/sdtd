@@ -17,12 +17,17 @@ function open_ws(reconnecting) {
     window.ws = new WebSocket("ws://7d2d.ratilicus.com/ws/");
     window.ws.onopen = function() {
         console.log('ws opened');
-        if (reconnecting) {
+        if (! reconnecting) {
             // if it got disconnected, and now reconnecting, the server will resend all the info except chat
             // So, we have to remove those so we don't have duplicates
-            $('#chat-output div.chat-post').remove()
-            $('#chat-output div.chat-info').remove()
-        }
+//            $('#chat-output div.chat-post').remove()
+//            $('#chat-output div.chat-info').remove()
+            var json = JSON.stringify({
+                'tt': 'cmd',
+                'msg': '/posts'
+            });
+            window.ws.send(json);
+        } 
     }
 
     window.ws.onclose = function() {
@@ -56,7 +61,8 @@ function open_ws(reconnecting) {
             case 'post':    // post message received (perminent message)
             case 'info':    // info message received (since user list was introduced there is no more user entered/left the room messages)
                 var out = $('#chat-output')
-                out.append('<div mid="'+json.id+'" class="chat-'+ (json.tt || 'info') +'" onclick="msg_click(this)">'+json.msg+'</div>');
+                var close = ((USER.id==json.uid) && (json.tt=='post')) ? '<button type="button" class="close" onclick="remove_message(this, \''+json.id+'\')" aria-label="Close"><span aria-hidden="true">&times;</span></button>': ''
+                out.append('<div mid="'+json.id+'" class="chat-'+ (json.tt || 'info') +'" onclick="msg_click(this)">'+json.msg+close+'</div>');
                 out.scrollTop(out.prop("scrollHeight"));
                 break;
             case 'lr':      // reload page command (not used yet, potentially necessary to update css/js on client side)
@@ -77,6 +83,20 @@ function msg_click(el) {
 function init_ws() {
     window.username = 'User'
     open_ws();
+}
+
+function remove_message(el, mid) {
+    if (window.ws) {
+        var json = JSON.stringify({
+            'tt': 'cmd',
+            'msg': '/rm',
+            'sm': mid
+        });
+        window.ws.send(json);
+        var mel = $(el)
+        mel.parent().css('backgroundColor', 'red');
+        mel.remove();
+    }
 }
 
 function send() {

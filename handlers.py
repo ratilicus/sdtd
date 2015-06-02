@@ -162,8 +162,8 @@ class MarkerHandler(BaseHandler):
         if self.current_user:
             # get user owned markers, and other public markers
             query = {'$or': [
-                {'eid': self.current_user['eid']},
-                {'eid': {'$ne': self.current_user['eid']}, 'public': True}
+                {'username': self.current_user['username']},
+                {'username': {'$ne': self.current_user['username']}, 'public': True}
             ]}
         else:
             # get public markers

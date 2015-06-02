@@ -339,11 +339,11 @@ function get_markers() {
             window.place_markers[e.id] = add_marker(
                 e.x, e.y, e.z, 
                 desc, 
-                e.type || e.public ? 'poi': 'private',
+                e.public ? 'poi': 'private',
                 {
                     weight: 2,
                     opacity: 0.5,
-                    color: e.public ? '#ffff00': '#00ff00',
+                    color: '#ffff00',    //e.public ? '#ffff00': '#00ff00',
                     fillOpacity: 0.35, 
                     zIndexOffset: 0,
                     entity: e,
@@ -411,7 +411,8 @@ function create_marker(lat, lng) {
 
 function create_marker_button(lat, lng) {
     var desc = $('#create-marker-name').val(),
-        is_public = USER.id ? true : ! $('#create-marker-private').prop('checked');
+        is_public = USER.id ? ! $('#create-marker-private').prop('checked'): true;
+
     if (desc) {
         create_marker_ajax(lng, 0, lat, 'poi', desc, is_public);
         $('#marker-modal').modal('hide')
