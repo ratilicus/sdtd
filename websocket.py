@@ -13,7 +13,9 @@ import tornado.websocket
 from bson import ObjectId
 from bson.json_util import loads as json_decode, dumps as json_encode
 from tornado import gen
+import time
 
+TP_DELAY_MIN = 10
 
 class WebSocket(tornado.websocket.WebSocketHandler):
     sid = None
@@ -37,15 +39,23 @@ class WebSocket(tornado.websocket.WebSocketHandler):
         self.telnet_parser = self.settings['telnet_parser']
         self.need_full_update = True
 
-        user_id = self.get_secure_cookie("user")
-        if user_id:
-            self.current_user = yield self.db.players.find_one({'_id': int(user_id)})
+        self.load_player()
 
         # preload messages and store them in class-wide variable
         if not WebSocket._cache_loaded:
             self.preload_cache()
 
         print 'WebSocket prepared'
+
+    @gen.coroutine
+    def load_player(self):
+        user_id = self.get_secure_cookie("user")
+        if user_id:
+            self.current_user = yield self.db.players.find_one({'_id': int(user_id)})
+            self.name = self.current_user['username']
+        else:
+            self.name = 'Anonymous'
+
 
     @gen.coroutine
     def preload_cache(self):
@@ -66,14 +76,6 @@ class WebSocket(tornado.websocket.WebSocketHandler):
         self.sid = hash(self)
         self.name = None
         print 'WebSocket opened', self.sid
-
-        # send entered room message
-        if self.current_user:
-            self.name = self.current_user['username']
-        else:
-            self.name = 'Anonymous'  #self.request.headers['X-Real-Ip']
-        #text = u'%s entered the room' % self.name
-        #self.send_msg(text, tt='info')
 
         self.sockets[self.sid] = self
         self.send_userlist()
@@ -137,11 +139,23 @@ class WebSocket(tornado.websocket.WebSocketHandler):
                     self.preload_cache()
 
         elif tt == 'tp' and self.current_user:
+            ts = int(time.time())
+        
+            if 'last_tp' in self.current_user:
+                dt = ts - self.current_user['last_tp']
+                if dt < TP_DELAY_MIN * 60:
+                    self.send_msg('You can only teleport once every %d min.  Only %2.1f min have passed.' % (TP_DELAY_MIN, dt/60.0), to_all=False, tt='info')
+                    return
+            
             print 'teleporting %s to %s' % (self.current_user['_id'], json['tp'])
             self.telnet.write('tele %s %s 1500 %s\n' % (self.current_user['_id'], json['tp']['x'], json['tp']['z']))
             yield gen.sleep(1.5)
             self.telnet.write('tele %s %s %s %s\n' % (self.current_user['_id'], json['tp']['x'], json['tp']['y'], json['tp']['z']))
-            self.send_msg(text)
+            self.current_user['last_tp'] = last_tp = ts
+            self.db.players.update(
+                {'_id': self.current_user['_id']}, 
+                {'$set': {'last_tp': last_tp}}
+            )
 
     def send_msg(self, text, to_all=True, tt='msg', id='', uid=None):
         #sockets = self.settings['sockets']

@@ -303,7 +303,7 @@ function add_marker(x, y, z, name, type, opts) {
     var marker = L.polygon(latlngs, opts || {});
     
     marker.addTo(window.leafletMap);
-    //marker.bindPopup(name);
+    marker.bindPopup(name.replace('\n', '<br>'));
     marker.on('click', click_marker);
     //console.log(marker);
     return marker;
@@ -330,11 +330,12 @@ function get_markers() {
             var NSEW = Math.abs(e.z*8)+ (e.z>=0 ? " N ": " S ") +
                Math.abs(e.x*8)+ (e.x>=0 ? " E": " W");
 
-            var desc =  ((e.o || !e.username) ? 
-                        "<button onclick=\"remove_marker('"+
-                        e.id+"')\">Remove</button>" : "") + "&nbsp;" + 
-                        e.desc + (e.public ? '' : ' <sup>(private)</sup>' ) + 
-                        " <sub>- added by " + (e.username || 'Anonymous') + "</sub>";
+            var desc =  "&nbsp;" + 
+                        e.desc + (e.public ? '' : ' <sup>(private)</sup>\n' ) + 
+                        " <sub>- added by " + (e.username || 'Anonymous') + "</sub>\n" +
+                        ((e.o || !e.username) ? 
+                        " <button onclick=\"remove_marker('"+
+                        e.id+"')\">Remove</button>" : "");
             
             window.place_markers[e.id] = add_marker(
                 e.x, e.y, e.z, 
@@ -383,6 +384,10 @@ function show_spot_info(e) {
 
     // show location info
     $('#location-info').html(window.spot_info_template({NSEW: NSEW, lat: lat, lng: lng}));
+
+    $('#marker-modal').on('shown.bs.modal', function () {
+      $('#create-marker-name').focus()
+    });
 }
 
 function create_marker(lat, lng) {

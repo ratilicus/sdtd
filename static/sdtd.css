@@ -33,17 +33,23 @@ ul.navbar-right {
 
 div.chat-post {
     background-color: #ddddff;
-    font-size: 1.3em;
-    line-height: 1.7em;
+    font-size: 1.1em;
+    line-height: 1.4em;
+    border-bottom: 1px solid #eeeeff;
 }
+div.chat-post button {
+    font-size: 0.9em;
+    line-height: 1.0em;
+}
+
 div.chat-msg {
     background-color: #ffffff;
     font-size: 1.1em;
 }
 div.chat-info {
     background-color: #ffffdd;   
-    font-size: 1.3em;
-    line-height: 1.7em;
+    font-size: 1.1em;
+    line-height: 1.4em;
 }
 
 #map {
