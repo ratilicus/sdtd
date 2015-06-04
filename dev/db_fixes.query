@@ -1,0 +1,5 @@
+var players={};db.players.find().forEach(function(p) {players[p['username']]=p;});
+
+db.messages.find({ts:null}).forEach(function(m){var ts = m['_id'].getTimestamp().getTime()/1000;db.messages.update(m['_id'], {$set:{ts:ts}});})
+db.markers.find({uid:null}).forEach(function(m) {var uid=players[m.username];if (uid) {db.markers.update({_id:m._id}, {$set:{uid:uid}});}});
+

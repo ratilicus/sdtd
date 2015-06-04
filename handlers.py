@@ -157,7 +157,7 @@ class MarkerHandler(BaseHandler):
         'get all markers'
 
         markers = []
-        fields = ['id', 'desc', 'x', 'y', 'z', 'public', 'ts', 'eid', 'username']
+        fields = ['id', 'desc', 'x', 'y', 'z', 'public', 'ts', 'uid', 'username']
 
         if self.current_user:
             # get user owned markers, and other public markers
@@ -173,7 +173,7 @@ class MarkerHandler(BaseHandler):
         while (yield cursor.fetch_next):
             marker = cursor.next_object()
             marker['id'] = str(marker.pop('_id'))
-            marker['o'] = self.current_user and (marker.get('username')==self.current_user['username']) or False
+            marker['o'] = self.current_user and (marker['uid']==self.current_user['_id']) or False
             markers.append(marker)
 
         self.json_response(data=markers, success=True)
@@ -191,11 +191,10 @@ class MarkerHandler(BaseHandler):
             if self.current_user:
                 # create user owned marker
                 data['uid'] = self.current_user['_id']
-                data['eid'] = self.current_user['eid']
                 data['username'] = self.current_user['username']
             else:
                 # create anon marker
-                data['eid'] = 0
+                data['uid'] = 0
                 data['public'] = True  # Anon markers have to be public
                 
             self.db.markers.insert(data)
@@ -213,7 +212,7 @@ class MarkerHandler(BaseHandler):
             '_id': ObjectId(id),
             # if user is logged in, the user can remove owned and anon markers
             # anon users can only remove anon markers
-            'eid': ({'$in': [0, self.current_user['eid']]} if self.current_user else 0)
+            'uid': ({'$in': [0, self.current_user['_id']]} if self.current_user else 0)
         }
         self.db.markers.remove(query)
         self.json_response(data={}, success=True)
