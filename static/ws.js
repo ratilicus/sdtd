@@ -64,7 +64,7 @@ function open_ws(reconnecting) {
                 var close = ((USER.id==json.uid) && (json.tt=='post')) ? '<button type="button" class="close" onclick="remove_message(this, \''+json.id+'\')" aria-label="Close"><span aria-hidden="true">&times;</span></button>': ''
                 var dt = json.ts ? moment(json.ts*1000).format('lll') + ' | ' : '';
                 out.append('<div mid="'+json.id+'" class="chat-'+ (json.tt || 'info') +'" onclick="msg_click(this)">'+dt+json.msg+close+'</div>');
-                out.scrollTop(out.prop("scrollHeight"));
+                out.parent().scrollTop(out.prop("scrollHeight"));
                 break;
             case 'lr':      // reload page command (not used yet, potentially necessary to update css/js on client side)
                 location.reload();
