@@ -8,11 +8,30 @@ import re
 line_pat = re.compile(r'\d+\. (?P<username>[^,]*), id=(?P<id>\d+), steamid=(?P<steamid>\d+), online=(?P<online>True|False), ip=[\d.]*, playtime=(?P<playtime>\d+).*')
 slot_pat = re.compile(r'Slot \d+: (\d{3}) * (.*)')
 
+ban_pat = re.compile(r'^  \d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2} - (\d+) -.*$')
+
 
 if __name__ == "__main__":
     telnet = telnetlib.Telnet('localhost', 25025)
     telnet.write('loglevel all off\n')
     time.sleep(2)
+    telnet.write('ban list\n')
+    time.sleep(2)
+    line = telnet.read_until('Ban list entries:')
+    line = telnet.read_until('\n')
+    ban_list = []
+    cont = True
+    while cont:
+        line = telnet.read_until('\n', 1)
+        print 'line >%s<' % line
+        if not line.strip():
+            cont = False
+        else:
+            steamid =  ban_pat.findall(line)
+            if steamid:
+                ban_list.extend(steamid)
+
+    print 'banned>', ban_list
 
     telnet.write('lkp\n')
     cont = True
@@ -30,11 +49,14 @@ if __name__ == "__main__":
             if result:
                 #print 'user>', result.groupdict()
                 data = result.groupdict()
-                if int(data['playtime']) < 60:
+                if int(data['playtime']) < 300:
                     players.append(data)
 
     print 'scanning players'
     for p in players:
+        if p['steamid'] in ban_list:
+            print 'player %s is already banned... skipping' % p['steamid']
+            continue
         print 'scanning', p
         suspect = False
         items = []
@@ -50,16 +72,18 @@ if __name__ == "__main__":
                 if result:
                     count, item = result[0]
 #                    print item, count
-                    items.append((item, count))
                     if (
                         'sniperRifle' in item
                         or 'mp5' in item
                         or 'tnt' in item
+                        or 'reinforcedConcrete' in item
                     ):
                         suspect = True
-        if suspect:
-            for item, count in items:
-                print 'SUSPECT %s x%s' % (item, count)
+                        items.append((item, count, True))
+                    else:
+                        items.append((item, count, False))
 
-#42. bogard_a, id=48569, steamid=76561198097891896, online=False, ip=75.185.4.199, playtime=67 m, seen=2015-05-07 15:21
+        if suspect:
+            for item, count, suspect_item in items:
+                print 'SUSPECT %s x%s   %s' % (item, count, '<- SUSPECT' if suspect_item else '')
 

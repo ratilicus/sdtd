@@ -10,27 +10,26 @@ The code is in the process of being cleaned up, some things are done inconsisten
 '''
 
 # message of the day (for announcing mod updates, map resets, etc)
-MOTD = ''
+MOTD = 'NOTICE: The map is getting reset sometime this week.'
 
 import time
 import random
 import re
 from simplejson import dumps as json_encode
 from tornado import gen
-from websocket import WebSocket
 import traceback
+import telnetlib
 
 class CommandBase(object):
     ''' base class for commands that can be sent via telnet to game server '''
     cmd = ''        # command name
     delay = 1       # min number of seconds between sending the command
     
-    def __init__(self, db, telnet, ts, telnet_parser):
+    def __init__(self, db, ts, telnet_handler):
         self.db = db
-        self.telnet = telnet
         self.next = ts
         self.processing_flag = False
-        self.telnet_parser = telnet_parser
+        self.th = telnet_handler
 
     def reset(self):
         ''' reset command status, if command times out, etc '''
@@ -52,7 +51,7 @@ class CommandBase(object):
         if self.ready(ts):
             print 'cmd: sending %s' % self
             self.pre_send(ts)
-            self.telnet.write('%s\n' % self.cmd)
+            self.th.telnet.write('%s\n' % self.cmd)
             self.processing_flag = True
             return True
         else:
@@ -91,7 +90,7 @@ class GTCommand(CommandBase):
     def process_line(self, ts, line):
         if line.startswith('Day '):
             print 'GT day ' + line
-            self.telnet_parser.send_day_info(line)
+            self.th.send_day_info(line)
             return False
         return True
 
@@ -112,29 +111,14 @@ class LECommand(CommandBase):
         self.old_entities = self.entities
         self.entities = {}
         self.updates = {}
-        self.telnet_parser.entities.clear()
+        self.th.entities.clear()
         
 
     def process_line(self, ts, line):    
         if line.startswith('Total of '):
             # found last line of the telnet output, send partial and full entity updates, and removes
             remove_entities = list(set(self.old_entities.keys()) - set(self.entities.keys()))
-            print 'send update: s: %d e: %d u: %d r: %d' % (len(WebSocket.sockets), len(self.entities), len(self.updates), len(remove_entities))
-            WebSocket.send_update(
-                update_json={
-                    'tt': 'ue',
-                    'ue': self.updates,
-                    're': remove_entities
-                },
-                full_json={
-                    'tt': 'ue',
-                    'ue': self.entities,
-                    're': remove_entities,
-                    'full': True
-                },
-                reset_flag=True
-            )
-
+            self.th.update_entities(updates=self.updates, entities=self.entities, remove_entities=remove_entities)
             return False
         
         try:
@@ -144,7 +128,7 @@ class LECommand(CommandBase):
                 type, name, eid, x, y, z, rx, ry, rz, dead, health = pat_data[0]
                 eid=int(eid)
                 data = dict(id=eid, type=type, name=name, x=float(x), y=float(y), z=float(z), h=float(ry), dead=dead=='True', health=int(health))
-                self.telnet_parser.entities[eid] = data
+                self.th.entities[eid] = data
 
                 self.entities[eid] = data
 
@@ -158,7 +142,7 @@ class LECommand(CommandBase):
         return True
 
 
-class TelnetParser(object):
+class TelnetHandler(object):
     ''' Parses Telnet information and sends commands
     There are 2 basic communications related to telnet
     - parsing INF entries
@@ -166,6 +150,9 @@ class TelnetParser(object):
     
     '''
     player_connected_pat = re.compile(r'entityid=(\d+), name=([^,]+), steamid=(\d+)')
+
+    def log(self, text, *args):
+        print 'TelnetHandler> %s %r' % (text, args)
 
     @gen.coroutine
     def player_connected(self, line):
@@ -209,6 +196,8 @@ class TelnetParser(object):
         # handle player messages
         # handle custom commands?
         
+    def get_day_info(self):
+        return self.day_info
 
     def send_day_info(self, day_info=None):
         ''' send day time info.. called from GT command '''
@@ -216,28 +205,69 @@ class TelnetParser(object):
             self.day_info = '%s' % day_info
 
         print 'sdi', self.day_info, day_info
-        WebSocket.send_update({
-            'tt': 'ut',
-            'ut': self.day_info
-        })
+        self.sockets.send_day_info(day_info)
+
+    @gen.coroutine
+    def send_teleport_command(self, uid, x, y, z):
+        if not self.telnet:
+            self.log('send_teleport_command | Error no telnet connection')
+            return
+        self.log('teleporting %s to (%s, %s, %s)' % (uid, x, y, z))
+        self.telnet.write('tele %s %s 1500 %s\n' % (uid, x, z))
+        yield gen.sleep(1.5)
+        self.telnet.write('tele %s %s %s %s\n' % (uid, x, y, z))
+        self.log('teleporting %s done' % (uid))
+
+    def update_entities(self, updates, entities, remove_entities):
+        print 'send update: s: %d e: %d u: %d r: %d' % (len(self.sockets), len(entities), len(updates), len(remove_entities))
+        self.sockets.send_global_message(
+            json={
+                'tt': 'ue',
+                'ue': updates,
+                're': remove_entities
+            },
+            full_json={
+                'tt': 'ue',
+                'ue': entities,
+                're': remove_entities,
+                'full': True
+            },
+            reset_flag=True
+        )
+
    
     ############# UPDATE ###############
 
-    def __init__(self, db, telnet):
+    def __init__(self, db, telnet_host, telnet_port):
         self.ts = int(time.time())
         self.day_info = ''
         self.db = db
-        self.telnet = telnet
         self.entities = {}
         self.players = {}
         self.blank_line_count = 0
         self.last_cmd = ''
+        self.telnet_info = telnet_host, telnet_port
+
+        self.connect_telnet()
 
         self.commands = [
-            GTCommand(db, telnet, self.ts, self),
-            LECommand(db, telnet, self.ts, self),
+            GTCommand(db, self.ts, self),
+            LECommand(db, self.ts, self),
         ]
         self.current_command = None
+
+    @gen.coroutine
+    def connect_telnet(self):
+        try:
+            self.log('Connecting: %s, %d' % self.telnet_info)
+            self.telnet = telnetlib.Telnet(*self.telnet_info)
+            yield gen.sleep(4)
+        except Exception, e:
+            self.log('Telnet Connection Failed: %s' % e)
+            self.telnet = None
+
+    def set_sockets(self, sockets):
+        self.sockets = sockets
 
     def send_command(self):
         if not self.current_command or self.current_command.done():
@@ -257,7 +287,6 @@ class TelnetParser(object):
                 self.current_command_loops += 1
                 self.current_command.processing(self.ts, line)
 
-    @gen.coroutine
     def reset_current_command(self, reason='N/A'):
         ''' reset current command helper 
         - log reason for reset
@@ -266,8 +295,7 @@ class TelnetParser(object):
         '''
         print 'resetting current command: %s' % reason
 
-        self.telnet.open(self.telnet.host, self.telnet.port)
-        yield gen.sleep(2)
+        self.connect_telnet()
 
         self.blank_line_count = 0
         self.current_command_loops = 0
@@ -283,15 +311,22 @@ class TelnetParser(object):
         - passes data to current command
         - checks for timeouts
         '''
+
+        if not self.telnet:
+            return
+        
         self.ts = int(time.time())
         self.send_command()
-        lines = self.telnet.read_very_eager()
+        try:
+            lines = self.telnet.read_very_eager()
+        except EOFError:
+            self.reset_current_command('EOF Error: %s' % self.blank_line_count)
 
         if not lines:
             self.blank_line_count +=1
             if self.blank_line_count > 5:
                 self.reset_current_command('too many blank lines: %s' % self.blank_line_count)
-            WebSocket.ping_all()
+            self.sockets.ping_all()
             return False
 
         self.blank_line_count = 0

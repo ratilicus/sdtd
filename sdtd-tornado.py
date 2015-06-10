@@ -12,19 +12,18 @@ from bson.json_util import loads as json_decode, dumps as json_encode
 from tornado import gen
 
 from handlers import IndexHandler, RecipesHandler, AboutHandler, LoginHandler, LogoutHandler, MarkerHandler
-from websocket import WebSocket
+from websocket import WebSocketPool, WebSocket
 import telnetlib
-from tparser import TelnetParser
+from telnet_handler import TelnetHandler
 
 if __name__ == '__main__':
     print 'START'
 
     db = motor.MotorClient().sdtd
-    sockets = {}
 
-    #telnet = SDTDTelnet()
-    telnet = telnetlib.Telnet('localhost', 25025)
-    telnet_parser = TelnetParser(db, telnet)
+    telnet_handler = TelnetHandler(db, telnet_host='localhost', telnet_port=25025)
+    sockets = WebSocketPool(db=db, th=telnet_handler)
+    telnet_handler.set_sockets(sockets)
 
     SETTINGS = {
         't': int(time.time()),
@@ -34,8 +33,6 @@ if __name__ == '__main__':
         'autoreload': True,
         #'debug': True,
         'db': db,
-        'telnet': telnet,
-        'telnet_parser': telnet_parser,
         'sockets': sockets,
     }
 
@@ -59,7 +56,7 @@ if __name__ == '__main__':
 
     application = tornado.web.Application(URLS, **SETTINGS)
     application.listen(8888)
-    tornado.ioloop.PeriodicCallback(telnet_parser.update, 1000).start()
+    tornado.ioloop.PeriodicCallback(telnet_handler.update, 1000).start()
     tornado.ioloop.IOLoop.instance().start()
     
     print 'END'

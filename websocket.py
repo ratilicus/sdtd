@@ -1,14 +1,3 @@
-'''
-7D2D map markers Tornado Server
-by: Adam Dybczak (RaTilicus)
-
-Note: the Telnet and Tornado/Websocket code have recently been merged to allow exciting possibilities
-like in game teleportation using web interface, updating entities via websocket push as opposed to polling ajax.
-In the future, other possibilities like game to web to game chat, etc.
-The code is in the process of being cleaned up, some things are done inconsistently or incorrectly
-(such as how Websocket commands are sent, etc.)  Please bear with me.
-'''
-
 import tornado.websocket
 from bson import ObjectId
 from bson.json_util import loads as json_decode, dumps as json_encode
@@ -17,16 +6,114 @@ import time
 
 TP_DELAY_MIN = 10
 
+class WebSocketPool(object):
+    def __init__(self, db, th):
+        ''' Init WebSocketPool
+            param: db = database, th = telnet handler
+            - init main vars
+            - load posts
+        '''
+        super(WebSocketPool, self).__init__()
+        self.db = db
+        self.th = th
+        self.sockets = {}
+
+        # preload posts
+        self.posts = []
+        self.load_posts()
+
+    def log(self, text, *args):
+        print 'WebSocketPool> %s %r' % (text, args)
+
+    @gen.coroutine
+    def load_posts(self):
+        cursor = self.db.messages.find({'tt': 'post'}, ['_id', 'uid', 'msg', 'u', 'ts'], sort=(('_id', 1),), limit=1000)
+        while (yield cursor.fetch_next):
+            self.posts.append(cursor.next_object())
+
+
+    def create_post(self, json):
+        self.db.messages.insert(json)
+        self.posts.append(json)
+
+
+    @gen.coroutine
+    def remove_post(self, pid, uid):
+        found = -1
+        for i, p in enumerate(self.posts):
+            if p['_id'] == pid:
+                if p['uid'] == uid:
+                    found = i
+                break
+        if found >= 0:
+            self.posts.pop(i)
+            remove_message = self.db.messages.remove({'_id': pid, 'uid': uid})
+            yield remove_message
+            # TODO send a message to all to remove the post
+
+    def add(self, socket):
+        ''' add a socket, send day info, and send updated user list
+        '''
+        self.sockets[id(socket)] = socket
+        self.send_day_info()
+        self.send_user_list()
+
+    def remove(self, socket):
+        ''' remove a socket and send updated user list
+        '''
+        del self.sockets[id(socket)]
+        self.send_user_list()
+
+    def __iter__(self):
+        ''' iterate through all the sockets
+        '''
+        for s in self.sockets.values():
+            yield s
+
+    def __len__(self):
+        return len(self.sockets)
+
+    def send_global_message(self, json, full_json=None, reset_flag=False):
+        ''' send message to all sockets
+        '''
+        for s in self:
+            if full_json and s.need_full_update:
+                s.write_message(full_json)
+                if reset_flag:
+                    s.need_full_update=False
+            else:
+                s.write_message(json)
+
+    def send_user_list(self):
+        ''' send current user list
+        '''
+        self.log('send userlist')
+        # send current user list to new user
+        self.send_global_message({
+            'tt': 'uu',
+            'uc': len(self.sockets),
+            'ul': [s.name for s in self],
+        })
+
+    def send_day_info(self, day_info=None):
+        ''' send day info
+        '''
+        self.send_global_message({
+            'tt': 'ut',
+            'ut': day_info or self.th.get_day_info()
+        })
+
+    def ping_all(self):
+        self.log('ping_all', len(self.sockets))
+        for s in self:
+            s.ping('ping')
+
+
 class WebSocket(tornado.websocket.WebSocketHandler):
     socket_count = 0
 
-    sid = None
     uid = None
     name = None
-
-    sockets = {}
-    _cache = []
-    _cache_loaded = False
 
     @gen.coroutine
     def prepare(self):
@@ -35,42 +122,24 @@ class WebSocket(tornado.websocket.WebSocketHandler):
         - set self.curent_user (if logged in)
         - set self.POST from request body, decode json if request is json
         '''
-        WebSocket.socket_count += 1
-        self.sid = WebSocket.socket_count
 
         self.log('WebSocket prepare')
-        self.last_tp = None
-        self.sockets = WebSocket.sockets = self.settings['sockets']
-        self.db = self.settings['db']
-        self.telnet = self.settings['telnet']
-        self.telnet_parser = self.settings['telnet_parser']
-        self.need_full_update = True
-
-        # preload messages and store them in class-wide variable
-        if not WebSocket._cache_loaded:
-            self.log('WebSocket loading _cache')
-            WebSocket._cache_loaded = True
-            del WebSocket._cache[:]
-            cursor = self.db.messages.find({'tt': 'post'}, ['_id', 'uid', 'msg', 'u', 'ts'], sort=(('_id', 1),), limit=1000)
-            while (yield cursor.fetch_next):
-                WebSocket._cache.append(cursor.next_object())
+        self.last_tp_coord = None
+        self.sockets = self.settings['sockets']
+        self.db = self.sockets.db
+        self.need_full_update = True    # initially need a full list of all entities, after that updates can be incremental
 
         self.log('WebSocket prepared')
 
     def log(self, text, *args):
-        print '(%s, %s, %s) %s %r' % (self.sid, self.uid, self.name, text, args)
+        print 'Websocket %s, %s, %s> %s %r' % (id(self), self.uid, self.name, text, args)
 
-#    def check_origin(self, origin):
-#        print 'origin_check', origin
-#        return True#bool(re.match(r'^.*?\.mydomain\.com', origin))
-        
     @gen.coroutine
     def open(self):
-        self.name = None
+        self.uid = None
+        self.name = 'Anonymous'
 
         self.log('WebSocket opened')
-
-#        self.load_player()
 
         uid = self.get_secure_cookie("user")
         self.log('loading player', uid)
@@ -78,31 +147,12 @@ class WebSocket(tornado.websocket.WebSocketHandler):
             self.uid = int(uid)
             self.current_user = yield self.db.players.find_one({'_id': self.uid}, ['_id', 'eid', 'username', 'last_login', 'last_tp'])
             self.name = self.current_user['username']
-        else:
-            self.name = 'Anonymous'
         self.log('loaded player', self.name)
-
-
-
-        self.sockets[self.sid] = self
-        self.send_userlist()
-        self.telnet_parser.send_day_info()
-
-    @gen.coroutine
-    def send_userlist(self):
-        self.log('send userlist')
-        # send current user list to new user
-        WebSocket.send_update({
-            'tt': 'uu',
-            'uc': len(self.sockets),
-#            'ul': [s.name for s in self.sockets.values() if s.name],
-            'ul': [s.name if s.name else s.sid for s in self.sockets.values()],
-        })
+        self.sockets.add(self)
 
     @gen.coroutine
     def on_message(self, message):
         ts = int(time.time())
-        self.log('on_message: %s' % len(message))
 
         try:        
             json = json_decode(message)
@@ -110,21 +160,21 @@ class WebSocket(tornado.websocket.WebSocketHandler):
             self.log('on message: json_decode error: %s' % e)
             return
 
+        self.log('on_message: %s' % json)
+
         tt = json['tt']
 
         json['_id'] = id = ObjectId()
         json['u'] = self.name
-        json['uid'] = self.current_user['_id'] if self.current_user else None
+        json['uid'] = self.uid
         json['ts'] = ts
 
         if tt == 'post' and not self.current_user:
             # anon users can't create posts
             json['tt'] = tt = 'msg'
 
-
         if tt == 'post':
-            self.db.messages.insert(json)
-            WebSocket._cache.append(json)
+            self.sockets.create_post(json)
         elif tt == 'tp':
             self.db.tp.insert(json)
 
@@ -132,48 +182,58 @@ class WebSocket(tornado.websocket.WebSocketHandler):
 
         if tt == 'msg' or tt == 'post':
             text = u'%s wrote: %s' % (self.name, json['msg'])
-            self.send_msg(text, tt=tt, id=id, uid=json['uid'], ts=json['ts'])
+            self.send_message(text, tt=tt, id=id, uid=json['uid'], ts=json['ts'], to_all=True)
 
         elif tt == 'cmd':
-            self.log('commmand', json)
             if json['msg'] == '/posts':
-                # send existing message to newly connected user
-                if WebSocket._cache:
-                    for msg in WebSocket._cache:
-                        text = u'%s wrote: %s' % (msg['u'], msg['msg'])
-                        self.send_msg(text, to_all=False, tt='post', id=msg['_id'], uid=msg['uid'], ts=msg['ts'])
+                # send current list of posts
+                self.send_posts()
+
             elif json['msg'] == '/rm':
-                if self.current_user:
-                    remove_message = self.db.messages.remove({'uid': self.current_user['_id'], '_id': ObjectId(json['sm'])})
-                    yield remove_message
-                    WebSocket._cache_loaded = False
-                    # TODO send a message to all to remove the post
+                # remove a post
+                if self.uid:
+                    self.sockets.remove_post(ObjectId(json['sm']), self.uid)
+
             elif json['msg'] == '/u':
                 self.send_userlist()
+
         elif tt == 'tp' and self.current_user:
+            # teleport player
             x, y, z = json['tp']['x'], json['tp']['y'], json['tp']['z']
+            print self.current_user, self.last_tp_coord
             if 'last_tp' in self.current_user:
                 dt = ts - self.current_user['last_tp']
+                # limit teleporting to once every TP_DELAY_MIN minutes
+                # Note: currently keeping tp info in each socket.. so technically someone could do one tp for each open socket
+                print 'DT', dt
                 if dt < TP_DELAY_MIN * 60:
-                    if self.last_tp:
-                        dist = (x-self.last_tp[0])**2 + (z-self.last_tp[1])**2
-                        if dist > 64:
-                            self.send_msg('You can only teleport once every %d min.  Only %2.1f min have passed.' % (TP_DELAY_MIN, dt/60.0), to_all=False, tt='info')
+                    if self.last_tp_coord:
+                        dist_sqr = (x-self.last_tp_coord[0])**2 + (z-self.last_tp_coord[1])**2
+                        # only limit teleport if it's more than 8 blocks from the last tp coordinates
+                        # to allow teleporting to a different height if the player got stuck
+                        print 'dist_sqr', dist_sqr
+                        if dist_sqr > 64:
+                            self.send_message('You can only teleport once every %d min.  Only %2.1f min have passed.' % (TP_DELAY_MIN, dt/60.0), tt='info')
                             return
-            
-            self.log('teleporting %s to %s' % (self.current_user['_id'], json['tp']))
-            self.telnet.write('tele %s %s 1500 %s\n' % (self.current_user['_id'], x, z))
-            yield gen.sleep(1.5)
-            self.telnet.write('tele %s %s %s %s\n' % (self.current_user['_id'], x, y, z))
+            self.sockets.th.send_teleport_command(self.uid, x, y, z)
             self.current_user['last_tp'] = last_tp = ts
-            self.last_tp = (json['tp']['x'], json['tp']['z'])
-            upd = self.db.players.update(
-                {'_id': self.current_user['_id']}, 
+            self.last_tp_coord = (json['tp']['x'], json['tp']['z'])
+            update_last_tp = self.db.players.update(
+                {'_id': self.uid}, 
                 {'$set': {'last_tp': last_tp}}
             )
-            yield udp
+            yield update_last_tp
 
-    def send_msg(self, text, to_all=True, tt='msg', id='', uid=None, ts=None):
+    def send_posts(self):
+        ''' send existing message to newly connected user
+        '''
+        for msg in self.sockets.posts:
+            text = u'%s wrote: %s' % (msg['u'], msg['msg'])
+            self.send_message(text, to_all=False, tt='post', id=msg['_id'], uid=msg['uid'], ts=msg['ts'])
+
+    def send_message(self, text, to_all=False, tt='msg', id='', uid=None, ts=None):
+        ''' send message to user, or if to_all=True to all users
+        '''
         if text:
             json = {
                 'tt': tt,
@@ -183,33 +243,13 @@ class WebSocket(tornado.websocket.WebSocketHandler):
                 'ts': ts,
             }
             if to_all:
-                for s in self.sockets.values():
-                    s.write_message(json)
+                self.sockets.send_global_message(json)
             else:
                 self.write_message(json)
-
-    @classmethod
-    def send_update(cls, update_json, full_json=None, reset_flag=False):
-        for s in WebSocket.sockets.values():
-            if full_json and s.need_full_update:
-                s.write_message(full_json)
-                if reset_flag:
-                    s.need_full_update=False
-            else:
-                s.write_message(update_json)
-
-    @classmethod
-    def ping_all(cls):
-        print 'ping_all', len(WebSocket.sockets)
-        for s in WebSocket.sockets.values():
-            s.ping('ping')
 
     @gen.coroutine
     def on_close(self):
         self.log('WebSocket closing')
-
-        if self.sid in self.sockets:
-            del self.sockets[self.sid]
-
+        self.sockets.remove(self)
         self.log('WebSocket closed')
-        self.send_userlist()
+
