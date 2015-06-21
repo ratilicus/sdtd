@@ -38,7 +38,10 @@ class BaseHandler(tornado.web.RequestHandler):
             try:
                 self.current_user = yield self.db.players.find_one({'_id': int(user_id)})
             except:
+                print 'login_failed'
                 pass
+            if not self.current_user:
+                self.clear_cookie("user")
 
         if self.request.method in ['POST', 'PUT'] and self.request.body:
             try:

@@ -15,11 +15,13 @@ from handlers import IndexHandler, RecipesHandler, AboutHandler, LoginHandler, L
 from websocket import WebSocketPool, WebSocket
 import telnetlib
 from telnet_handler import TelnetHandler
+from log import Log
 
 if __name__ == '__main__':
     print 'START'
 
     db = motor.MotorClient().sdtd
+    log = Log.get_log(db)
 
     telnet_handler = TelnetHandler(db, telnet_host='localhost', telnet_port=25025)
     sockets = WebSocketPool(db=db, th=telnet_handler)

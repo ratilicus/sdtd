@@ -15,6 +15,7 @@ var USER = {
     {% if user %}
         id: {{ user['_id'] }},
         eid: {{ user['eid'] }},
+        is_admin: {{ 'true' if user['admin'] else 'false' }},
         username: "{{ user['username'] }}"
     {% end %}
 }
@@ -58,7 +59,7 @@ function onkey(e, down) {
 <select id="userlist"></select>
 
 <script type="text/template" class="entity_info_template">
-<b><%- day_info %></b> <% for(eid in players) { var player = players[eid]; %><button onclick="player_click(<%= eid %>)"><%- player.name %> [ <%- player.dead ? 'dead' : player.health %> ]</button><% } %>
+<b><%= day_info %></b> <% for(eid in players) { var player = players[eid]; %><button onclick="player_click(<%= eid %>)"><%- player.name %> [ <%- player.dead ? 'dead' : player.health %> ]</button><% } %>
 </script>
 
 <script type="text/template" class="spot_info_template">

@@ -9,8 +9,11 @@ The code is in the process of being cleaned up, some things are done inconsisten
 (such as how Websocket commands are sent, etc.)  Please bear with me.
 '''
 
+# MOD name
+MOD = 'Live Free or Die'
+
 # message of the day (for announcing mod updates, map resets, etc)
-MOTD = 'NOTICE: The map is getting reset sometime this week.'
+MOTD = ''
 
 import time
 import random
@@ -19,6 +22,7 @@ from simplejson import dumps as json_encode
 from tornado import gen
 import traceback
 import telnetlib
+import psutil
 
 class CommandBase(object):
     ''' base class for commands that can be sent via telnet to game server '''
@@ -49,7 +53,7 @@ class CommandBase(object):
             raise Exception('calling send on %s while processing' % self)
             
         if self.ready(ts):
-            print 'cmd: sending %s' % self
+#            print 'cmd: sending %s' % self
             self.pre_send(ts)
             self.th.telnet.write('%s\n' % self.cmd)
             self.processing_flag = True
@@ -85,12 +89,32 @@ class CommandBase(object):
 class GTCommand(CommandBase):
     ''' get time command '''
     cmd = 'gt'
-    delay = 60
+    delay = 15
+
+    def get_stats(self, ts):
+        io = psutil.net_io_counters(pernic=True)['eth0']
+        if self.last_ts and self.last_ts < ts:
+            cpu = psutil.cpu_percent(interval=0)
+            mem = psutil.virtual_memory().percent
+            io = psutil.net_io_counters(pernic=True)['eth0']
+            tsd = ts - self.last_ts
+            sent, recv = (io.bytes_sent-self.last_sent)/tsd/1024, (io.bytes_recv-self.last_recv)/tsd/1024
+            self.last_ts, self.last_sent, self.last_recv = ts, io.bytes_sent, io.bytes_recv
+            return ('CPU: %5.1f%% | MEM: %5.1f%% | NET: &uarr; %.1fkb/s &darr; %.1fkb/s' %
+                   (cpu, mem, sent, recv))
+        self.last_ts, self.last_sent, self.last_recv = ts, io.bytes_sent, io.bytes_recv
+    
+    def __init__(self, db, ts, telnet_handler):
+        super(GTCommand, self).__init__(db, ts, telnet_handler)
+        self.last_ts = None
+        self.get_stats(ts)
 
     def process_line(self, ts, line):
         if line.startswith('Day '):
-            print 'GT day ' + line
-            self.th.send_day_info(line)
+            stats = self.get_stats(ts)
+            data = '%s | %s' % (stats, line)
+            print 'GT day: ' + data
+            self.th.send_day_info(data)
             return False
         return True
 
@@ -173,6 +197,7 @@ class TelnetHandler(object):
                 'eid': entity_id,
                 'username': username,
                 'password': password,
+                'admin': False,
                 'last_login': int(time.time())
             })
         else:
@@ -183,7 +208,7 @@ class TelnetHandler(object):
             }})
         self.telnet.write('pm %s "7d2d.ratilicus.com (u: %s p: %s)"\n' % (entity_id, username, password))
         self.telnet.write('pm %s "Please go to that site and read the notes."\n' % (entity_id))
-        self.telnet.write('pm %s "Please install the Live Free or Die mod to avoid nasty problems."\n' % (entity_id))
+        self.telnet.write('pm %s "Please install the %s mod to avoid nasty problems."\n' % (entity_id, MOD))
         if MOTD:
             self.telnet.write('pm %s "%s"\n' % (entity_id, MOTD))
 
@@ -239,7 +264,7 @@ class TelnetHandler(object):
     ############# UPDATE ###############
 
     def __init__(self, db, telnet_host, telnet_port):
-        self.ts = int(time.time())
+        self.ts = time.time()
         self.day_info = ''
         self.db = db
         self.entities = {}
@@ -261,6 +286,8 @@ class TelnetHandler(object):
         try:
             self.log('Connecting: %s, %d' % self.telnet_info)
             self.telnet = telnetlib.Telnet(*self.telnet_info)
+            self.blank_line_count = 0
+            self.current_command_loops = 0
             yield gen.sleep(4)
         except Exception, e:
             self.log('Telnet Connection Failed: %s' % e)
@@ -281,7 +308,7 @@ class TelnetHandler(object):
 
     def process_command(self, line):
         if self.current_command and not self.current_command.done():
-            if self.current_command_loops > 200:
+            if self.current_command_loops > 1000:
                 self.reset_current_command('too many loops: %s' % self.current_command_loops)
             else:
                 self.current_command_loops += 1
@@ -293,14 +320,15 @@ class TelnetHandler(object):
         - reset command status and que
         - reconnect telnet (resets are usually due to timeout/telnet disconnect)
         '''
-        print 'resetting current command: %s' % reason
 
-        self.connect_telnet()
 
         self.blank_line_count = 0
         self.current_command_loops = 0
         self.current_command.reset()
         self.current_command = None
+        print 'resetting current command: %s' % reason
+
+        self.connect_telnet()
             
     def update(self):
         ''' update/process telnet parser
@@ -315,13 +343,14 @@ class TelnetHandler(object):
         if not self.telnet:
             return
         
-        self.ts = int(time.time())
+        self.ts = time.time()
         self.send_command()
         try:
             lines = self.telnet.read_very_eager()
         except EOFError:
             self.reset_current_command('EOF Error: %s' % self.blank_line_count)
-
+            lines = None
+            
         if not lines:
             self.blank_line_count +=1
             if self.blank_line_count > 5:

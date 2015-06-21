@@ -4,7 +4,14 @@ from bson.json_util import loads as json_decode, dumps as json_encode
 from tornado import gen
 import time
 
-TP_DELAY_MIN = 10
+TP_DELAY_MIN = 0
+
+INDEX_MODE = 1+2+4    # map entities + chat + posts
+
+MODE_NAME = {
+    INDEX_MODE: 'Map Page',
+}
+
 
 class WebSocketPool(object):
     def __init__(self, db, th):
@@ -38,16 +45,16 @@ class WebSocketPool(object):
 
 
     @gen.coroutine
-    def remove_post(self, pid, uid):
+    def remove_post(self, pid, uid, is_admin=False):
         found = -1
         for i, p in enumerate(self.posts):
             if p['_id'] == pid:
-                if p['uid'] == uid:
+                if is_admin or p['uid'] == uid:
                     found = i
                 break
         if found >= 0:
             self.posts.pop(i)
-            remove_message = self.db.messages.remove({'_id': pid, 'uid': uid})
+            remove_message = self.db.messages.remove({'_id': pid} if is_admin else {'_id': pid, 'uid': uid})
             yield remove_message
             # TODO send a message to all to remove the post
 
@@ -73,10 +80,13 @@ class WebSocketPool(object):
     def __len__(self):
         return len(self.sockets)
 
-    def send_global_message(self, json, full_json=None, reset_flag=False):
+    def send_global_message(self, json, full_json=None, reset_flag=False, mode=INDEX_MODE):
         ''' send message to all sockets
         '''
         for s in self:
+            if s.mode & mode == 0:
+                continue
+
             if full_json and s.need_full_update:
                 s.write_message(full_json)
                 if reset_flag:
@@ -88,11 +98,12 @@ class WebSocketPool(object):
         ''' send current user list
         '''
         self.log('send userlist')
+        
         # send current user list to new user
         self.send_global_message({
             'tt': 'uu',
             'uc': len(self.sockets),
-            'ul': [s.name for s in self],
+            'ul': ['%s [%s]' % (s.name, MODE_NAME[s.mode]) for s in self],
         })
 
     def send_day_info(self, day_info=None):
@@ -138,6 +149,7 @@ class WebSocket(tornado.websocket.WebSocketHandler):
     def open(self):
         self.uid = None
         self.name = 'Anonymous'
+        self.mode = INDEX_MODE
 
         self.log('WebSocket opened')
 
@@ -145,7 +157,7 @@ class WebSocket(tornado.websocket.WebSocketHandler):
         self.log('loading player', uid)
         if uid:
             self.uid = int(uid)
-            self.current_user = yield self.db.players.find_one({'_id': self.uid}, ['_id', 'eid', 'username', 'last_login', 'last_tp'])
+            self.current_user = yield self.db.players.find_one({'_id': self.uid}, ['_id', 'eid', 'username', 'last_login', 'last_tp', 'admin'])
             self.name = self.current_user['username']
         self.log('loaded player', self.name)
         self.sockets.add(self)
@@ -184,18 +196,29 @@ class WebSocket(tornado.websocket.WebSocketHandler):
             text = u'%s wrote: %s' % (self.name, json['msg'])
             self.send_message(text, tt=tt, id=id, uid=json['uid'], ts=json['ts'], to_all=True)
 
+        elif tt == 'page':
+            if json['page'] == 'index':
+                self.mode = MESSAGE_MODE
+
         elif tt == 'cmd':
             if json['msg'] == '/posts':
                 # send current list of posts
                 self.send_posts()
 
+            if json['msg'] == '/resolutions':
+                pass
+
             elif json['msg'] == '/rm':
                 # remove a post
                 if self.uid:
-                    self.sockets.remove_post(ObjectId(json['sm']), self.uid)
+                    self.sockets.remove_post(ObjectId(json['sm']), self.uid, is_admin=self.current_user['admin'])
 
             elif json['msg'] == '/u':
                 self.send_userlist()
+
+            elif json['msg'] == '/lr':
+                print 'sending LR'
+                self.sockets.send_global_message({'tt': 'lr'})
 
         elif tt == 'tp' and self.current_user:
             # teleport player
@@ -206,7 +229,7 @@ class WebSocket(tornado.websocket.WebSocketHandler):
                 # limit teleporting to once every TP_DELAY_MIN minutes
                 # Note: currently keeping tp info in each socket.. so technically someone could do one tp for each open socket
                 print 'DT', dt
-                if dt < TP_DELAY_MIN * 60:
+                if not self.current_user['admin'] and dt < TP_DELAY_MIN * 60:
                     if self.last_tp_coord:
                         dist_sqr = (x-self.last_tp_coord[0])**2 + (z-self.last_tp_coord[1])**2
                         # only limit teleport if it's more than 8 blocks from the last tp coordinates

@@ -56,7 +56,7 @@ function init_map() {
     window.players = {};
     window.zombies = {};
     window.entity_markers={};
-    window.setTimeout(redraw_map, 10000);
+    window.setTimeout(redraw_map, 15000);
     $('body').css('overflow', 'hidden');
 }
 
@@ -78,7 +78,7 @@ function redraw_map() {
    
     if (window.redraw_timer)
         window.clearTimeout(window.redraw_timer);
-    window.redraw_timer = window.setTimeout(redraw_map, 10000);
+    window.redraw_timer = window.setTimeout(redraw_map, 15000);
 }
 
 function player_click(eid) {

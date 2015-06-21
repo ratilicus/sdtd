@@ -61,7 +61,7 @@ function open_ws(reconnecting) {
             case 'post':    // post message received (perminent message)
             case 'info':    // info message received (since user list was introduced there is no more user entered/left the room messages)
                 var out = $(json.tt=='post' ? '#posts': '#msgs')
-                var close = ((USER.id==json.uid) && (json.tt=='post')) ? '<button type="button" class="close" onclick="remove_message(this, \''+json.id+'\')" aria-label="Close"><span aria-hidden="true">&times;</span></button>': ''
+                var close = ((USER.is_admin || USER.id==json.uid) && (json.tt=='post')) ? '<button type="button" class="close" onclick="remove_message(this, \''+json.id+'\')" aria-label="Close"><span aria-hidden="true">&times;</span></button>': ''
                 var dt = json.ts ? moment(json.ts*1000).format('lll') + ' | ' : '';
                 out.append('<div mid="'+json.id+'" class="chat-'+ (json.tt || 'info') +'" onclick="msg_click(this)">'+dt+json.msg+close+'</div>');
                 out.parent().scrollTop(out.prop("scrollHeight"));

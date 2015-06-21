@@ -1,4 +1,5 @@
 *.pyc
 __secrets__.py
 static/entities.js
+static/recipes.json
 static/map
